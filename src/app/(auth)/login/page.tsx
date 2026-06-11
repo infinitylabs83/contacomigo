@@ -41,6 +41,7 @@ export default function LoginPage() {
       const supabase = createClient()
       const { error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) throw error
+      document.cookie = "demo_mode=; path=/; max-age=0"
       router.push("/dashboard")
       router.refresh()
     } catch {

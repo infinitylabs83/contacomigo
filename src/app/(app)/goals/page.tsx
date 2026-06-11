@@ -1,10 +1,11 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
 import { Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { MoneyText } from "@/components/ui/money-text"
-import { DEMO_GOALS } from "@/lib/demo-data"
+import { createClient } from "@/lib/supabase/client"
 
 const GOAL_EMOJI: Record<string, string> = {
   emergency: "🛡️", travel: "✈️", purchase: "🛍️", debt: "🔓", investment: "📈", other: "⭐",
@@ -20,8 +21,22 @@ const PRIORITY_CONFIG: Record<string, { label: string; bg: string; text: string 
 }
 
 export default function GoalsPage() {
-  const totalSaved = DEMO_GOALS.reduce((s, g) => s + g.current_amount, 0)
-  const totalTarget = DEMO_GOALS.reduce((s, g) => s + g.target_amount, 0)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [goals, setGoals] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const load = async () => {
+      const supabase = createClient()
+      const { data } = await supabase.from("goals").select("*").order("created_at", { ascending: false })
+      setGoals(data ?? [])
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  const totalSaved = goals.reduce((s: number, g: any) => s + (g.current_amount ?? 0), 0)
+  const totalTarget = goals.reduce((s: number, g: any) => s + (g.target_amount ?? 0), 0)
   const overallPct = totalTarget > 0 ? Math.round((totalSaved / totalTarget) * 100) : 0
 
   return (
@@ -59,7 +74,11 @@ export default function GoalsPage() {
         <p className="text-white/60 text-xs mt-1">de <MoneyText value={totalTarget} size="sm" className="text-white/60" /> em metas</p>
       </motion.div>
 
-      {DEMO_GOALS.length === 0 ? (
+      {loading ? (
+        <div className="rounded-3xl border bg-card p-12 text-center">
+          <p className="text-muted-foreground text-sm">Carregando metas...</p>
+        </div>
+      ) : goals.length === 0 ? (
         <div className="rounded-3xl border bg-card p-12 text-center">
           <p className="text-5xl mb-3">🎯</p>
           <p className="font-semibold mb-1">Ainda sem metas!</p>
@@ -70,7 +89,8 @@ export default function GoalsPage() {
         </div>
       ) : (
         <div className="space-y-4">
-          {DEMO_GOALS.map((goal, i) => {
+          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+          {goals.map((goal: any, i: number) => {
             const pct = Math.min((goal.current_amount / goal.target_amount) * 100, 100)
             const remaining = goal.target_amount - goal.current_amount
             const monthsLeft = goal.monthly_contribution
@@ -91,17 +111,19 @@ export default function GoalsPage() {
                 <div className="flex items-center gap-3">
                   <div
                     className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shrink-0"
-                    style={{ backgroundColor: `${goal.color}20` }}
+                    style={{ backgroundColor: `${goal.color ?? "#8b5cf6"}20` }}
                   >
                     {GOAL_EMOJI[goal.type] ?? "⭐"}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-bold truncate">{goal.name}</p>
-                    <p className="text-xs text-muted-foreground">{GOAL_LABEL[goal.type]}</p>
+                    <p className="text-xs text-muted-foreground">{GOAL_LABEL[goal.type] ?? "Meta"}</p>
                   </div>
-                  <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${priority.bg} ${priority.text}`}>
-                    {priority.label}
-                  </span>
+                  {priority && (
+                    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${priority.bg} ${priority.text}`}>
+                      {priority.label}
+                    </span>
+                  )}
                 </div>
 
                 {/* Ring + numbers */}
@@ -111,7 +133,7 @@ export default function GoalsPage() {
                       <circle cx="32" cy="32" r="28" fill="none" stroke="currentColor" strokeWidth="5" className="text-muted/25" />
                       <circle
                         cx="32" cy="32" r="28" fill="none"
-                        stroke={goal.color}
+                        stroke={goal.color ?? "#8b5cf6"}
                         strokeWidth="5"
                         strokeLinecap="round"
                         strokeDasharray={`${dash} ${ringCirc - dash}`}
@@ -126,7 +148,7 @@ export default function GoalsPage() {
                   <div className="flex-1 space-y-1.5">
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Guardado</span>
-                      <span className="font-bold" style={{ color: goal.color }}>
+                      <span className="font-bold" style={{ color: goal.color ?? "#8b5cf6" }}>
                         <MoneyText value={goal.current_amount} size="sm" />
                       </span>
                     </div>

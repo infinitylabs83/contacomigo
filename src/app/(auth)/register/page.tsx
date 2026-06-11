@@ -79,6 +79,7 @@ export default function RegisterPage() {
   const [dir, setDir]           = useState(1)
   const [answers, setAnswers]   = useState<Answers>({})
   const [name, setName]         = useState("")
+  const [whatsapp, setWhatsapp] = useState("")
   const [email, setEmail]       = useState("")
   const [password, setPassword] = useState("")
   const [showPw, setShowPw]     = useState(false)
@@ -130,6 +131,7 @@ export default function RegisterPage() {
       // 2. Save lead with quiz data (public insert, no auth needed)
       await supabase.from("leads").upsert({
         email,
+        whatsapp,
         source: "register_wizard",
         pain_point: answers.pain_point,
         income_range: answers.income_range,
@@ -269,13 +271,17 @@ export default function RegisterPage() {
           <div className="text-center mb-6">
             <div className="text-5xl mb-3">✨</div>
             <h2 className="text-xl font-bold">Quase lá! Crie sua conta</h2>
-            <p className="text-muted-foreground text-sm mt-1">Só mais 3 campos e você começa</p>
+            <p className="text-muted-foreground text-sm mt-1">Só mais 4 campos e você começa</p>
           </div>
 
           <form onSubmit={handleRegister} className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="name">Seu nome</Label>
               <Input id="name" placeholder="João Silva" value={name} onChange={(e) => setName(e.target.value)} required />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="whatsapp">WhatsApp</Label>
+              <Input id="whatsapp" type="tel" placeholder="(11) 99999-9999" value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="email">E-mail</Label>
@@ -316,17 +322,6 @@ export default function RegisterPage() {
               <Link href="/privacy" className="underline hover:text-foreground">Termos e Privacidade</Link>.
             </p>
           </form>
-
-          <div className="relative my-4">
-            <div className="absolute inset-0 flex items-center"><div className="w-full border-t" /></div>
-            <div className="relative flex justify-center text-xs text-muted-foreground">
-              <span className="bg-background px-2">ou</span>
-            </div>
-          </div>
-
-          <Button variant="outline" className="w-full" onClick={handleDemo}>
-            Explorar com dados de demonstração
-          </Button>
 
           <div className="flex items-center justify-between mt-4">
             <button onClick={goBack} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">

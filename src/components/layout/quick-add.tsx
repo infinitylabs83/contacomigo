@@ -124,13 +124,27 @@ export function QuickAdd() {
       const today = new Date().toISOString().split("T")[0]
       const label = description.trim() || selectedCat?.label || (mode === "expense" ? "Gasto" : "Receita")
 
+      // Ensure we have an account — create default wallet if none
+      let resolvedAccountId = accountId
+      if (!resolvedAccountId) {
+        const { data: newAcc } = await supabase
+          .from("accounts")
+          .insert({ user_id: user.id, name: "Carteira", type: "wallet", color: "#7c3aed", icon: "wallet", initial_balance: 0, current_balance: 0 })
+          .select("id").single()
+        if (newAcc) {
+          resolvedAccountId = newAcc.id
+          setAccountId(newAcc.id)
+          setAccounts(prev => [...prev, { id: newAcc.id, name: "Carteira", icon: "wallet", color: "#7c3aed" }])
+        }
+      }
+
       const transaction: Record<string, unknown> = {
         user_id:        user.id,
         type:           mode,
         description:    label,
         amount:         parsed,
         date:           today,
-        account_id:     accountId || null,
+        account_id:     resolvedAccountId,
         status:         "confirmed",
         is_installment: payMethod === "credit" && installments > 1,
         installment_total: payMethod === "credit" ? installments : null,

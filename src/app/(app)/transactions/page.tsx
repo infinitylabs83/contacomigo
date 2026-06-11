@@ -131,87 +131,81 @@ const FILTERS = [
 type FilterKey = typeof FILTERS[number]["key"]
 
 const BUDGET_CATS = [
-  { id: "alimentacao", label: "🍔 Comida" },
-  { id: "mercado",     label: "🛒 Mercado" },
-  { id: "transporte",  label: "🚗 Transporte" },
-  { id: "moradia",     label: "🏠 Moradia" },
-  { id: "saude",       label: "💊 Saúde" },
-  { id: "lazer",       label: "🎮 Lazer" },
-  { id: "assinatura",  label: "📱 Assinatura" },
-  { id: "educacao",    label: "📚 Estudo" },
-  { id: "outros",      label: "💸 Outros" },
+  { id: "food",      emoji: "🍔", label: "Comida" },
+  { id: "market",    emoji: "🛒", label: "Mercado" },
+  { id: "transport", emoji: "🚗", label: "Transporte" },
+  { id: "housing",   emoji: "🏠", label: "Moradia" },
+  { id: "health",    emoji: "💊", label: "Saúde" },
+  { id: "leisure",   emoji: "🎮", label: "Lazer" },
+  { id: "subs",      emoji: "📱", label: "Assinatura" },
+  { id: "education", emoji: "📚", label: "Estudo" },
+  { id: "pet",       emoji: "🐾", label: "Pet" },
+  { id: "other",     emoji: "💸", label: "Outros" },
 ]
+const STORAGE_KEY = "nexo_budget_limits"
 
 // ─── Expectativa x Realidade ──────────────────────────────────────────────────
-function BudgetVsReal() {
-  const [items, setItems]     = useState<any[]>([])
+function BudgetVsReal({ transactions }: { transactions: any[] }) {
+  const [limits, setLimits]   = useState<Record<string, number>>({})
   const [showAdd, setShowAdd] = useState(false)
   const [newCat, setNewCat]   = useState(BUDGET_CATS[0].id)
   const [newAmt, setNewAmt]   = useState("")
-  const [saving, setSaving]   = useState(false)
 
-  const loadItems = () => {
-    const supabase = createClient()
-    Promise.all([
-      supabase.from("budget_items").select("*"),
-      supabase.from("categories").select("*"),
-    ]).then(([b, c]) => {
-      const cats = c.data ?? []
-      const mapped = (b.data ?? []).map((item: any) => {
-        const cat = cats.find((x: any) => x.id === item.category_id)
-        const pct = item.amount_limit > 0 ? (item.amount_spent / item.amount_limit) * 100 : 0
-        const over = item.amount_spent > item.amount_limit
-        return { ...item, cat, pct, over }
-      }).sort((a: any, b: any) => b.pct - a.pct)
-      setItems(mapped)
-    })
+  // Load limits from localStorage
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY)
+      if (raw) setLimits(JSON.parse(raw))
+    } catch {}
+  }, [])
+
+  const saveLimits = (next: Record<string, number>) => {
+    setLimits(next)
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
   }
 
-  useEffect(() => { loadItems() }, [])
-
-  const handleAddLimit = async () => {
+  const handleAddLimit = () => {
     const amt = parseFloat(newAmt.replace(",", "."))
     if (!amt || amt <= 0) return
-    setSaving(true)
-    const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setSaving(false); return }
-
-    const now = new Date()
-    // Find or create budget for this month
-    let { data: budget } = await supabase
-      .from("budgets")
-      .select("id")
-      .eq("month", now.getMonth() + 1)
-      .eq("year", now.getFullYear())
-      .maybeSingle()
-
-    if (!budget) {
-      const { data: nb } = await supabase
-        .from("budgets")
-        .insert({ user_id: user.id, month: now.getMonth() + 1, year: now.getFullYear() })
-        .select("id")
-        .single()
-      budget = nb
-    }
-
-    if (budget) {
-      await supabase.from("budget_items").upsert({
-        budget_id: budget.id,
-        category_id: newCat,
-        amount_limit: amt,
-        amount_spent: 0,
-      }, { onConflict: "budget_id,category_id" })
-    }
-
-    setNewAmt(""); setShowAdd(false); setSaving(false)
-    loadItems()
+    saveLimits({ ...limits, [newCat]: amt })
+    setNewAmt(""); setShowAdd(false)
   }
 
-  const totalLimit = items.reduce((s: number, i: any) => s + i.amount_limit, 0)
-  const totalSpent = items.reduce((s: number, i: any) => s + i.amount_spent, 0)
+  const handleRemove = (id: string) => {
+    const next = { ...limits }
+    delete next[id]
+    saveLimits(next)
+  }
+
+  // Compute actual spending this month from transactions, matched by emoji in notes
+  const now         = new Date()
+  const monthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
+  const spent: Record<string, number> = {}
+  for (const t of transactions) {
+    if (t.type !== "expense") continue
+    if (!(t.date ?? "").startsWith(monthPrefix)) continue
+    const emoji = t.notes?.includes("|") ? t.notes.split("|")[0] : null
+    if (!emoji) continue
+    const cat = BUDGET_CATS.find(c => c.emoji === emoji)
+    if (cat) spent[cat.id] = (spent[cat.id] ?? 0) + t.amount
+  }
+
+  // Build rows: all cats that have a limit OR have spending
+  const rows = BUDGET_CATS
+    .filter(c => limits[c.id] !== undefined || spent[c.id])
+    .map(c => {
+      const limit  = limits[c.id] ?? 0
+      const actual = spent[c.id]  ?? 0
+      const pct    = limit > 0 ? (actual / limit) * 100 : 0
+      const over   = limit > 0 && actual > limit
+      return { ...c, limit, actual, pct, over }
+    })
+    .sort((a, b) => b.pct - a.pct)
+
+  const totalLimit = rows.reduce((s, r) => s + r.limit, 0)
+  const totalSpent = rows.reduce((s, r) => s + r.actual, 0)
   const totalPct   = totalLimit > 0 ? (totalSpent / totalLimit) * 100 : 0
-  const overCount  = items.filter((i: any) => i.over).length
+  const overCount  = rows.filter(r => r.over).length
 
   return (
     <div className="rounded-3xl border bg-card p-5 space-y-4">
@@ -243,70 +237,71 @@ function BudgetVsReal() {
               className="w-full pl-9 h-11 rounded-xl border text-sm bg-card px-3"
             />
           </div>
-          <button onClick={handleAddLimit} disabled={!newAmt || saving}
+          <button onClick={handleAddLimit} disabled={!newAmt}
             className="w-full h-10 rounded-xl text-white text-sm font-bold disabled:opacity-40"
             style={{ background: "linear-gradient(135deg,#7c3aed,#6d28d9)" }}>
-            {saving ? "Salvando..." : "✓ Salvar limite"}
+            ✓ Salvar limite
           </button>
         </div>
       )}
 
-      {/* Total header */}
-      <div className={`rounded-2xl p-4 flex items-center justify-between ${
-        totalPct > 100 ? "bg-red-50 dark:bg-red-950/30" :
-        totalPct > 85  ? "bg-amber-50 dark:bg-amber-950/30" :
-        "bg-green-50 dark:bg-green-950/30"
-      }`}>
-        <div>
-          <p className="text-xs text-muted-foreground mb-0.5">Total do mês</p>
-          <p className="font-black text-lg">
-            {formatCurrency(totalSpent)}
-            <span className="text-sm font-normal text-muted-foreground"> / {formatCurrency(totalLimit)}</span>
-          </p>
+      {/* Total header — only if limits exist */}
+      {totalLimit > 0 && (
+        <div className={`rounded-2xl p-4 flex items-center justify-between ${
+          totalPct > 100 ? "bg-red-50" : totalPct > 85 ? "bg-amber-50" : "bg-green-50"
+        }`}>
+          <div>
+            <p className="text-xs text-muted-foreground mb-0.5">Total do mês</p>
+            <p className="font-black text-lg">
+              {formatCurrency(totalSpent)}
+              <span className="text-sm font-normal text-muted-foreground"> / {formatCurrency(totalLimit)}</span>
+            </p>
+          </div>
+          <div className="text-right">
+            <p className={`text-2xl font-black ${totalPct > 100 ? "text-red-500" : totalPct > 85 ? "text-amber-500" : "text-green-600"}`}>
+              {totalPct.toFixed(0)}%
+            </p>
+            {overCount > 0 && <p className="text-xs text-red-500">{overCount} categoria{overCount > 1 ? "s" : ""} estourou</p>}
+          </div>
         </div>
-        <div className="text-right">
-          <p className={`text-2xl font-black ${totalPct > 100 ? "text-red-500" : totalPct > 85 ? "text-amber-500" : "text-green-600"}`}>
-            {totalPct.toFixed(0)}%
-          </p>
-          {overCount > 0 && <p className="text-xs text-red-500">{overCount} categoria{overCount > 1 ? "s" : ""} estourada{overCount > 1 ? "s" : ""}</p>}
-        </div>
-      </div>
+      )}
 
-      {/* Per category */}
+      {/* Per category rows */}
       <div className="space-y-3">
-        {items.map(item => {
-          const emoji = CAT_EMOJI[item.category_id] ?? "💸"
-          const color = CAT_COLOR[item.category_id] ?? "#6b7280"
-          const barW  = Math.min(item.pct, 100)
+        {rows.map(row => {
+          const barW = Math.min(row.pct, 100)
+          const barColor = row.over ? "#ef4444" : row.pct > 85 ? "#f59e0b" : "#7c3aed"
           return (
-            <div key={item.id}>
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-sm font-semibold">{emoji} {item.cat?.name ?? item.category_id}</span>
+            <div key={row.id}>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-sm font-semibold">{row.emoji} {row.label}</span>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">{formatCurrency(item.amount_spent)}</span>
-                  <span className="text-xs text-muted-foreground">/</span>
-                  <span className="text-xs text-muted-foreground">{formatCurrency(item.amount_limit)}</span>
-                  <span className={`text-xs font-bold ml-1 ${item.over ? "text-red-500" : "text-green-600"}`}>
-                    {item.over ? `+${(item.pct - 100).toFixed(0)}%` : `-${(100 - item.pct).toFixed(0)}%`}
-                  </span>
+                  <span className="text-xs text-muted-foreground">{formatCurrency(row.actual)}</span>
+                  {row.limit > 0 && <>
+                    <span className="text-xs text-muted-foreground">/</span>
+                    <span className="text-xs text-muted-foreground">{formatCurrency(row.limit)}</span>
+                    <span className={`text-xs font-bold ${row.over ? "text-red-500" : "text-green-600"}`}>
+                      {row.over ? `+${(row.pct - 100).toFixed(0)}%` : `-${(100 - row.pct).toFixed(0)}%`}
+                    </span>
+                  </>}
+                  <button onClick={() => handleRemove(row.id)} className="text-muted-foreground hover:text-red-500 text-xs ml-1">✕</button>
                 </div>
               </div>
-              <div className="h-2 bg-muted/50 rounded-full overflow-hidden">
-                <motion.div
-                  initial={{ width: 0 }} animate={{ width: `${barW}%` }}
-                  transition={{ duration: 0.6, ease: "easeOut" }}
-                  className="h-full rounded-full"
-                  style={{ background: item.over ? "#ef4444" : color }}
-                />
-              </div>
+              {row.limit > 0 && (
+                <div className="h-2 bg-muted/40 rounded-full overflow-hidden">
+                  <motion.div initial={{ width: 0 }} animate={{ width: `${barW}%` }}
+                    transition={{ duration: 0.6, ease: "easeOut" }}
+                    className="h-full rounded-full" style={{ background: barColor }} />
+                </div>
+              )}
             </div>
           )
         })}
       </div>
 
-      {items.length === 0 && !showAdd && (
+      {rows.length === 0 && !showAdd && (
         <p className="text-sm text-muted-foreground text-center py-4">
-          Clique em <strong>+ Adicionar limite</strong> para definir quanto quer gastar por categoria.
+          Toque em <strong>+ Adicionar limite</strong> para definir quanto quer gastar por categoria.
         </p>
       )}
     </div>
@@ -571,7 +566,7 @@ export default function TransactionsPage() {
       </div>
 
       {/* ─── EXPECTATIVA x REALIDADE ─── */}
-      <BudgetVsReal />
+      <BudgetVsReal transactions={allTransactions} />
 
       {/* ─── SUMMARY ─── */}
       <div className="grid grid-cols-3 gap-3">

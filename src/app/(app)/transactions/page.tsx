@@ -621,11 +621,16 @@ export default function TransactionsPage() {
 
         <AnimatePresence>
           {transactions.map((t, i) => {
-            const cat    = categoryMap[t.category_id]
-            const acc    = accountMap[t.account_id]
-            const card   = t.card_id ? cardMap[t.card_id] : null
-            const emoji  = CAT_EMOJI[t.category_id] ?? "💸"
+            const cat      = categoryMap[t.category_id]
+            const acc      = accountMap[t.account_id]
+            const card     = t.card_id ? cardMap[t.card_id] : null
             const isIncome = t.type === "income"
+
+            // Category from DB or from notes field (saved by QuickAdd as "emoji|label")
+            const notesParts  = t.notes?.includes("|") ? t.notes.split("|") : null
+            const catEmoji    = cat ? (CAT_EMOJI[t.category_id] ?? "💸") : (notesParts?.[0] ?? (t.type === "income" ? "💚" : "💸"))
+            const catLabel    = cat?.name ?? notesParts?.[1] ?? null
+            const iconBg      = cat?.color ? `${cat.color}18` : isIncome ? "#10b98118" : "#7c3aed18"
 
             return (
               <motion.div key={t.id}
@@ -634,12 +639,21 @@ export default function TransactionsPage() {
                 className="rounded-2xl border bg-card p-4 flex items-center gap-3"
               >
                 <div className="w-11 h-11 rounded-2xl flex items-center justify-center text-xl shrink-0"
-                     style={{ backgroundColor: `${cat?.color ?? "#6b7280"}18` }}>{emoji}</div>
+                     style={{ backgroundColor: iconBg }}>{catEmoji}</div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold truncate">{t.description}</p>
+                  {/* Category name as title, description as subtitle */}
+                  {catLabel ? (
+                    <>
+                      <p className="text-sm font-semibold truncate">{catLabel}</p>
+                      {t.description && t.description !== catLabel && (
+                        <p className="text-xs text-muted-foreground truncate">{t.description}</p>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-sm font-semibold truncate">{t.description}</p>
+                  )}
                   <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                     <span className="text-xs text-muted-foreground">{formatDate(t.date, "short")}</span>
-                    {cat && <span className="text-xs bg-muted/70 px-2 py-0.5 rounded-full text-muted-foreground">{cat.name}</span>}
                     {card && <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold" style={{ background: "#7c3aed18", color: "#7c3aed" }}>💳 {card.name}</span>}
                     {t.is_recurring && <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">🔁 fixo</span>}
                   </div>

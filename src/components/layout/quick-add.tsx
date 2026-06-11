@@ -137,7 +137,7 @@ export function QuickAdd() {
         installment_current: payMethod === "credit" ? 1 : null,
         is_recurring:   false,
         tags:           [],
-        notes:          null,
+        notes:          selectedCat ? `${selectedCat.emoji}|${selectedCat.label}` : null,
       }
 
       if (payMethod === "credit" && creditCardId) {

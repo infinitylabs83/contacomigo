@@ -812,28 +812,43 @@ function TabAssino({ userId }: { userId: string }) {
 
   async function loadSubs() {
     const supabase = createClient()
-    const [subRes, txnRes] = await Promise.all([
-      supabase.from("subscriptions").select("*").order("created_at", { ascending: false }),
-      supabase.from("transactions").select("id,description,amount,notes,date")
-        .eq("is_recurring", true).eq("type", "expense").order("date", { ascending: false }),
-    ])
-    const dbSubs = subRes.data ?? []
-    const txnSubs = (txnRes.data ?? []).map(t => {
-      const parts = t.notes?.includes("|") ? t.notes.split("|") : null
-      return {
-        id: `txn-${t.id}`,
-        name: t.description,
-        amount: t.amount,
-        billing_cycle: "monthly",
-        billing_day: null,
-        _fromTxn: true,
-        _emoji: parts?.[0] ?? "📱",
+    // Busca transações recorrentes (lançadas via Lançar → Assinatura)
+    const { data: txns } = await supabase
+      .from("transactions")
+      .select("id,description,amount,notes,date")
+      .eq("is_recurring", true)
+      .eq("type", "expense")
+      .order("date", { ascending: false })
+
+    // Busca assinaturas manuais (adicionadas pelo formulário)
+    const { data: manualSubs } = await supabase
+      .from("subscriptions")
+      .select("*")
+      .order("created_at", { ascending: false })
+
+    // Agrupa transações recorrentes por nome (pega o mais recente de cada)
+    const txnByName = new Map<string, any>()
+    for (const t of txns ?? []) {
+      const key = t.description?.toLowerCase() ?? ""
+      if (!txnByName.has(key)) {
+        const parts = t.notes?.includes("|") ? t.notes.split("|") : null
+        txnByName.set(key, {
+          id: `txn-${t.id}`,
+          name: t.description,
+          amount: t.amount,
+          billing_cycle: "monthly",
+          billing_day: null,
+          _fromTxn: true,
+          _emoji: parts?.[0] ?? "📱",
+        })
       }
-    })
-    // Merge: prefer subscriptions table, append txn-based ones not already in subscriptions
-    const subNames = new Set(dbSubs.map(s => s.name?.toLowerCase()))
-    const extra = txnSubs.filter(t => !subNames.has(t.name?.toLowerCase()))
-    setSubs([...dbSubs, ...extra])
+    }
+
+    // Combina: manuais + recorrentes que não se repetem
+    const manualNames = new Set((manualSubs ?? []).map(s => s.name?.toLowerCase()))
+    const txnItems = [...txnByName.values()].filter(t => !manualNames.has(t.name?.toLowerCase()))
+
+    setSubs([...(manualSubs ?? []), ...txnItems])
   }
 
   function handleSaved(saved: any) {

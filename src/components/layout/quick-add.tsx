@@ -105,8 +105,10 @@ export function QuickAdd() {
   const handleCategory = (cat: Cat) => {
     setSelectedCat(cat)
     setDescription("")
-    if (cat.id === "cat-subs") setIsRecurring(true)
-    if (cat.id === "cat-other" || cat.id === "cat-other-in") {
+    // Assinatura auto-marca como recorrente
+    setIsRecurring(cat.id === "cat-subs")
+    // Assinatura e "Outros" pedem descrição (nome do serviço ou do gasto)
+    if (cat.id === "cat-other" || cat.id === "cat-other-in" || cat.id === "cat-subs") {
       setStep("describe")
     } else {
       setStep("amount")
@@ -161,19 +163,6 @@ export function QuickAdd() {
       }
 
       await supabase.from("transactions").insert(transaction)
-
-      // If recurring, add to subscriptions table if not already present
-      if (isRecurring && mode === "expense") {
-        const todayDate = new Date()
-        const { data: existing } = await supabase.from("subscriptions")
-          .select("id").eq("user_id", user.id).ilike("name", label).maybeSingle()
-        if (!existing) {
-          await supabase.from("subscriptions").insert({
-            user_id: user.id, name: label, amount: parsed,
-            billing_cycle: "monthly", billing_day: todayDate.getDate(), status: "active",
-          })
-        }
-      }
 
       window.dispatchEvent(new CustomEvent("transaction-added"))
 
@@ -395,22 +384,12 @@ export function QuickAdd() {
                     </div>
                   )}
 
-                  {/* Recurring toggle */}
-                  {mode === "expense" && (
-                    <button onClick={() => setIsRecurring(!isRecurring)}
-                      className={`flex items-center gap-2.5 w-full p-3 rounded-2xl border-2 mb-3 text-left transition-all ${
-                        isRecurring ? "border-primary bg-primary/8" : "border-border/50 bg-muted/20"
-                      }`}>
-                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${
-                        isRecurring ? "border-primary bg-primary" : "border-muted-foreground"
-                      }`}>
-                        {isRecurring && <Check className="size-3 text-white" />}
-                      </div>
-                      <div>
-                        <p className={`text-xs font-bold ${isRecurring ? "text-primary" : "text-foreground"}`}>🔁 Gasto recorrente (assino todo mês)</p>
-                        <p className="text-[10px] text-muted-foreground">aparece na aba "Assino todo mês"</p>
-                      </div>
-                    </button>
+                  {/* Badge informativo quando é assinatura */}
+                  {isRecurring && (
+                    <div className="flex items-center gap-2 bg-primary/8 border border-primary/20 rounded-2xl px-3 py-2 mb-3">
+                      <span className="text-base">🔁</span>
+                      <p className="text-xs font-semibold text-primary">Vai aparecer em "Assino todo mês" automaticamente</p>
+                    </div>
                   )}
 
                   {/* Optional details */}

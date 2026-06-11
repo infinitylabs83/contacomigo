@@ -60,9 +60,13 @@ export default async function DashboardPage() {
         : { label: "Ver movimentações", href: "/transactions" },
   }
 
-  const gamificationData: GamificationState = gamification ?? {
-    health_score: 0, total_points: 0, level: 1,
-    streak_days: 0, achievements: [], weekly_missions: [],
+  const gamificationData: GamificationState = {
+    health_score:    gamification?.health_score    ?? 0,
+    total_points:    gamification?.total_points    ?? 0,
+    level:           gamification?.level           ?? 1,
+    streak_days:     gamification?.streak_days     ?? 0,
+    achievements:    Array.isArray(gamification?.achievements)    ? gamification.achievements    : [],
+    weekly_missions: Array.isArray(gamification?.weekly_missions) ? gamification.weekly_missions : [],
   }
 
   const userName = (user.user_metadata?.full_name as string)?.split(" ")[0] ?? "você"

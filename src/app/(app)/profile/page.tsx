@@ -18,7 +18,7 @@ export default async function ProfilePage() {
   const total_points  = gamification?.total_points  ?? 0
   const level         = gamification?.level         ?? 1
   const streak_days   = gamification?.streak_days   ?? 0
-  const achievements  = (gamification?.achievements ?? []) as any[]
+  const achievements  = Array.isArray(gamification?.achievements) ? gamification.achievements as any[] : []
 
   const fullName = ((user as any).user_metadata?.full_name as string) ?? ""
   const email    = (user as any).email ?? ""

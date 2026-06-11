@@ -451,15 +451,17 @@ export function QuickAdd() {
                     </div>
                   )}
 
-                  <motion.button whileTap={{ scale: 0.97 }} onClick={handleConfirm}
+                  <button
+                    type="button"
+                    onClick={handleConfirm}
                     disabled={!amount || saving}
-                    className="w-full h-14 rounded-2xl text-white font-black text-base disabled:opacity-40 flex items-center justify-center gap-2"
+                    className="w-full h-14 rounded-2xl text-white font-black text-base disabled:opacity-40 flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
                     style={{ background: mode === "expense" ? "linear-gradient(135deg,#7c3aed,#6d28d9)" : "linear-gradient(135deg,#059669,#047857)" }}>
                     {saving ? "Salvando..." : mode === "expense"
                       ? payMethod === "credit" ? "✓ Lançar no crédito 💳" : "✓ Registrar gasto"
                       : "✓ Anotar entrada"}
                     {!saving && <span className="text-xs opacity-70 font-normal">+{pts}pts</span>}
-                  </motion.button>
+                  </button>
                 </>
               )}
 

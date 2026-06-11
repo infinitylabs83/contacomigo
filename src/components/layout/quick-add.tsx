@@ -146,6 +146,8 @@ export function QuickAdd() {
 
       await supabase.from("transactions").insert(transaction)
 
+      window.dispatchEvent(new CustomEvent("transaction-added"))
+
       if (mounted.current) {
         setDone(true)
         setTimeout(handleClose, 1600)

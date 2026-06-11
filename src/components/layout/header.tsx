@@ -2,10 +2,11 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { Bell, User } from "lucide-react"
+import { Bell, User, LogOut } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "./theme-toggle"
 import { createClient } from "@/lib/supabase/client"
+import { useRouter } from "next/navigation"
 
 function LogoIcon() {
   return (
@@ -19,6 +20,7 @@ function LogoIcon() {
 
 export function Header({ title }: { title?: string }) {
   const [firstName, setFirstName] = useState("")
+  const router = useRouter()
 
   useEffect(() => {
     createClient().auth.getUser().then(({ data: { user } }) => {
@@ -26,6 +28,11 @@ export function Header({ title }: { title?: string }) {
       setFirstName(name.split(" ")[0] ?? "")
     })
   }, [])
+
+  const handleLogout = async () => {
+    await createClient().auth.signOut()
+    router.push("/login")
+  }
 
   return (
     <header className="h-16 border-b bg-card flex items-center justify-between px-4 sticky top-0 z-40">
@@ -48,6 +55,10 @@ export function Header({ title }: { title?: string }) {
             <User className="size-4" />
           </Button>
         </Link>
+        <Button variant="ghost" size="icon-sm" aria-label="Sair" onClick={handleLogout}
+          className="text-red-500 hover:text-red-600 hover:bg-red-50">
+          <LogOut className="size-4" />
+        </Button>
       </div>
     </header>
   )

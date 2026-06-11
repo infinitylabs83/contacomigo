@@ -128,10 +128,27 @@ const FILTERS = [
 ] as const
 type FilterKey = typeof FILTERS[number]["key"]
 
+const BUDGET_CATS = [
+  { id: "alimentacao", label: "🍔 Comida" },
+  { id: "mercado",     label: "🛒 Mercado" },
+  { id: "transporte",  label: "🚗 Transporte" },
+  { id: "moradia",     label: "🏠 Moradia" },
+  { id: "saude",       label: "💊 Saúde" },
+  { id: "lazer",       label: "🎮 Lazer" },
+  { id: "assinatura",  label: "📱 Assinatura" },
+  { id: "educacao",    label: "📚 Estudo" },
+  { id: "outros",      label: "💸 Outros" },
+]
+
 // ─── Expectativa x Realidade ──────────────────────────────────────────────────
 function BudgetVsReal() {
-  const [items, setItems] = useState<any[]>([])
-  useEffect(() => {
+  const [items, setItems]     = useState<any[]>([])
+  const [showAdd, setShowAdd] = useState(false)
+  const [newCat, setNewCat]   = useState(BUDGET_CATS[0].id)
+  const [newAmt, setNewAmt]   = useState("")
+  const [saving, setSaving]   = useState(false)
+
+  const loadItems = () => {
     const supabase = createClient()
     Promise.all([
       supabase.from("budget_items").select("*"),
@@ -146,7 +163,48 @@ function BudgetVsReal() {
       }).sort((a: any, b: any) => b.pct - a.pct)
       setItems(mapped)
     })
-  }, [])
+  }
+
+  useEffect(() => { loadItems() }, [])
+
+  const handleAddLimit = async () => {
+    const amt = parseFloat(newAmt.replace(",", "."))
+    if (!amt || amt <= 0) return
+    setSaving(true)
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { setSaving(false); return }
+
+    const now = new Date()
+    // Find or create budget for this month
+    let { data: budget } = await supabase
+      .from("budgets")
+      .select("id")
+      .eq("month", now.getMonth() + 1)
+      .eq("year", now.getFullYear())
+      .maybeSingle()
+
+    if (!budget) {
+      const { data: nb } = await supabase
+        .from("budgets")
+        .insert({ user_id: user.id, month: now.getMonth() + 1, year: now.getFullYear() })
+        .select("id")
+        .single()
+      budget = nb
+    }
+
+    if (budget) {
+      await supabase.from("budget_items").upsert({
+        budget_id: budget.id,
+        category_id: newCat,
+        amount_limit: amt,
+        amount_spent: 0,
+      }, { onConflict: "budget_id,category_id" })
+    }
+
+    setNewAmt(""); setShowAdd(false); setSaving(false)
+    loadItems()
+  }
 
   const totalLimit = items.reduce((s: number, i: any) => s + i.amount_limit, 0)
   const totalSpent = items.reduce((s: number, i: any) => s + i.amount_spent, 0)
@@ -155,10 +213,41 @@ function BudgetVsReal() {
 
   return (
     <div className="rounded-3xl border bg-card p-5 space-y-4">
-      <div>
-        <p className="font-black text-base">🎯 Esperava vs Gastou</p>
-        <p className="text-xs text-muted-foreground">Quanto você planejou gastar x quanto saiu de verdade este mês.</p>
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <p className="font-black text-base">🎯 Esperava vs Gastou</p>
+          <p className="text-xs text-muted-foreground">Quanto você planejou gastar x quanto saiu de verdade este mês.</p>
+        </div>
+        <button onClick={() => setShowAdd(v => !v)}
+          className="shrink-0 text-xs font-bold px-3 py-1.5 rounded-xl transition-colors"
+          style={{ background: showAdd ? "#f3f4f6" : "rgba(124,58,237,0.1)", color: showAdd ? "#6b7280" : "#7c3aed" }}>
+          {showAdd ? "✕ Cancelar" : "+ Adicionar limite"}
+        </button>
       </div>
+
+      {/* Add limit form */}
+      {showAdd && (
+        <div className="rounded-2xl p-4 space-y-3" style={{ background: "rgba(124,58,237,0.05)", border: "1.5px solid rgba(124,58,237,0.15)" }}>
+          <p className="text-sm font-bold">Defina quanto quer gastar este mês:</p>
+          <select value={newCat} onChange={e => setNewCat(e.target.value)}
+            className="w-full rounded-xl border px-3 h-11 text-sm bg-card">
+            {BUDGET_CATS.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+          </select>
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-bold">R$</span>
+            <input
+              type="number" inputMode="decimal" placeholder="0,00"
+              value={newAmt} onChange={e => setNewAmt(e.target.value)}
+              className="w-full pl-9 h-11 rounded-xl border text-sm bg-card px-3"
+            />
+          </div>
+          <button onClick={handleAddLimit} disabled={!newAmt || saving}
+            className="w-full h-10 rounded-xl text-white text-sm font-bold disabled:opacity-40"
+            style={{ background: "linear-gradient(135deg,#7c3aed,#6d28d9)" }}>
+            {saving ? "Salvando..." : "✓ Salvar limite"}
+          </button>
+        </div>
+      )}
 
       {/* Total header */}
       <div className={`rounded-2xl p-4 flex items-center justify-between ${
@@ -213,9 +302,11 @@ function BudgetVsReal() {
         })}
       </div>
 
-      <p className="text-xs text-muted-foreground text-center">
-        Os limites são definidos em <strong>Planejar → Meu limite</strong>
-      </p>
+      {items.length === 0 && !showAdd && (
+        <p className="text-sm text-muted-foreground text-center py-4">
+          Clique em <strong>+ Adicionar limite</strong> para definir quanto quer gastar por categoria.
+        </p>
+      )}
     </div>
   )
 }
@@ -235,7 +326,7 @@ export default function TransactionsPage() {
   const [allCards, setAllCards]               = useState<CreditCard[]>([])
   const [loading, setLoading]                 = useState(true)
 
-  useEffect(() => {
+  const fetchData = () => {
     const supabase = createClient()
     Promise.all([
       supabase.from("transactions").select("*").order("date", { ascending: false }),
@@ -249,7 +340,13 @@ export default function TransactionsPage() {
       setAllCards(cc.data ?? [])
       setLoading(false)
     })
-  }, [])
+  }
+
+  useEffect(() => {
+    fetchData()
+    window.addEventListener("transaction-added", fetchData)
+    return () => window.removeEventListener("transaction-added", fetchData)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const dailyData  = buildDailyData(weekOffset, allTransactions)
   const weekLabel  = getWeekLabel(weekOffset)

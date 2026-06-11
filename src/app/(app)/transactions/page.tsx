@@ -1,0 +1,536 @@
+"use client"
+
+import { useState } from "react"
+import { motion, AnimatePresence } from "framer-motion"
+import { Search, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, Calendar, ArrowUp, ArrowDown } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid } from "recharts"
+import { formatCurrency, formatDate } from "@/lib/utils"
+import { DEMO_TRANSACTIONS, DEMO_CATEGORIES, DEMO_ACCOUNTS, DEMO_CARDS, DEMO_BUDGET_ITEMS } from "@/lib/demo-data"
+import type { TransactionType } from "@/types"
+
+// ─── color / emoji maps ────────────────────────────────────────────────────────
+const CAT_COLOR: Record<string, string> = {
+  "cat-food": "#F97316", "cat-market": "#84CC16", "cat-transport": "#3B82F6",
+  "cat-leisure": "#EC4899", "cat-health": "#EF4444", "cat-subs": "#0EA5E9",
+  "cat-education": "#8B5CF6", "cat-other": "#9CA3AF", "cat-housing": "#6B7280",
+  "cat-gym": "#F59E0B", "cat-internet": "#14B8A6",
+}
+const CAT_EMOJI: Record<string, string> = {
+  "cat-food": "🍔", "cat-market": "🛒", "cat-transport": "🚗", "cat-leisure": "🎮",
+  "cat-health": "💊", "cat-subs": "📱", "cat-education": "📚", "cat-other": "💸",
+  "cat-housing": "🏠", "cat-salary": "💼", "cat-freelance": "💻", "cat-reimbursement": "🔄",
+  "cat-gym": "🏋️", "cat-internet": "📶",
+}
+const DAY_LABELS  = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
+const MONTH_NAMES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
+
+// ─── helpers ──────────────────────────────────────────────────────────────────
+function getMondayOf(date: Date) {
+  const d = new Date(date)
+  d.setHours(0, 0, 0, 0)
+  const day = d.getDay()
+  d.setDate(d.getDate() + (day === 0 ? -6 : 1 - day))
+  return d
+}
+
+function buildDailyData(weekOffset: number) {
+  const today  = new Date()
+  const monday = getMondayOf(today)
+  monday.setDate(monday.getDate() + weekOffset * 7)
+  const expTxns  = DEMO_TRANSACTIONS.filter(t => t.type === "expense")
+  const catIds   = [...new Set(expTxns.map(t => t.category_id))]
+  const todayStr = today.toISOString().slice(0, 10)
+
+  return Array.from({ length: 7 }, (_, i) => {
+    const date    = new Date(monday)
+    date.setDate(monday.getDate() + i)
+    const dateStr = date.toISOString().slice(0, 10)
+    const row: Record<string, unknown> = {
+      day: DAY_LABELS[i], date: dateStr,
+      dayNum: date.getDate(), month: date.getMonth() + 1,
+      isToday: dateStr === todayStr,
+      isFuture: date > today,
+    }
+    catIds.forEach(cid => {
+      row[cid] = expTxns
+        .filter(t => t.date === dateStr && t.category_id === cid)
+        .reduce((s, t) => s + t.amount, 0)
+    })
+    return row
+  })
+}
+
+function getWeekTotal(weekOffset: number) {
+  const today  = new Date()
+  const monday = getMondayOf(today)
+  monday.setDate(monday.getDate() + weekOffset * 7)
+  const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6)
+  return DEMO_TRANSACTIONS
+    .filter(t => t.type === "expense")
+    .filter(t => { const d = new Date(t.date); return d >= monday && d <= sunday })
+    .reduce((s, t) => s + t.amount, 0)
+}
+
+function getWeekLabel(weekOffset: number) {
+  const today  = new Date()
+  const monday = getMondayOf(today)
+  monday.setDate(monday.getDate() + weekOffset * 7)
+  const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6)
+  if (weekOffset === 0)  return "Esta semana"
+  if (weekOffset === -1) return "Semana passada"
+  return `${monday.getDate()} ${MONTH_NAMES[monday.getMonth()]} – ${sunday.getDate()} ${MONTH_NAMES[sunday.getMonth()]}`
+}
+
+// Monthly evolution — last 5 months
+function buildMonthlyEvolution() {
+  const today = new Date()
+  return Array.from({ length: 5 }, (_, i) => {
+    const d = new Date(today.getFullYear(), today.getMonth() - (4 - i), 1)
+    const y = d.getFullYear(); const m = d.getMonth()
+    const prefix = `${y}-${String(m + 1).padStart(2, "0")}`
+    const gastos  = DEMO_TRANSACTIONS
+      .filter(t => t.type === "expense" && t.date.startsWith(prefix))
+      .reduce((s, t) => s + t.amount, 0)
+    const entradas = DEMO_TRANSACTIONS
+      .filter(t => t.type === "income" && t.date.startsWith(prefix))
+      .reduce((s, t) => s + t.amount, 0)
+    const isCurrent = m === today.getMonth() && y === today.getFullYear()
+    return { label: MONTH_NAMES[m], gastos, entradas, isCurrent }
+  })
+}
+
+// Calendar helpers
+function getCalendarWeeks(year: number, month: number) {
+  const first = new Date(year, month, 1)
+  const last  = new Date(year, month + 1, 0)
+  const weeks: Date[][] = []
+  let week: Date[] = []
+  const startDay = first.getDay() === 0 ? 6 : first.getDay() - 1
+  for (let i = 0; i < startDay; i++) week.push(new Date(year, month, 1 - startDay + i))
+  for (let d = 1; d <= last.getDate(); d++) {
+    week.push(new Date(year, month, d))
+    if (week.length === 7) { weeks.push(week); week = [] }
+  }
+  if (week.length > 0) {
+    while (week.length < 7) { const l = week[week.length-1]; const n = new Date(l); n.setDate(l.getDate()+1); week.push(n) }
+    weeks.push(week)
+  }
+  return weeks
+}
+
+const FILTERS = [
+  { key: "all",      label: "Tudo"       },
+  { key: "income",   label: "💚 Entrou"  },
+  { key: "expense",  label: "🔴 Saiu"    },
+  { key: "credit",   label: "💳 Crédito" },
+  { key: "recurring",label: "🔁 Fixo"    },
+] as const
+type FilterKey = typeof FILTERS[number]["key"]
+
+// ─── Expectativa x Realidade ──────────────────────────────────────────────────
+function BudgetVsReal() {
+  const items = DEMO_BUDGET_ITEMS.map(item => {
+    const cat = DEMO_CATEGORIES.find(c => c.id === item.category_id)
+    const pct = item.amount_limit > 0 ? (item.amount_spent / item.amount_limit) * 100 : 0
+    const over = item.amount_spent > item.amount_limit
+    return { ...item, cat, pct, over }
+  }).sort((a, b) => b.pct - a.pct)
+
+  const totalLimit = items.reduce((s, i) => s + i.amount_limit, 0)
+  const totalSpent = items.reduce((s, i) => s + i.amount_spent, 0)
+  const totalPct   = totalLimit > 0 ? (totalSpent / totalLimit) * 100 : 0
+  const overCount  = items.filter(i => i.over).length
+
+  return (
+    <div className="rounded-3xl border bg-card p-5 space-y-4">
+      <div>
+        <p className="font-black text-base">🎯 Esperava vs Gastou</p>
+        <p className="text-xs text-muted-foreground">Quanto você planejou gastar x quanto saiu de verdade este mês.</p>
+      </div>
+
+      {/* Total header */}
+      <div className={`rounded-2xl p-4 flex items-center justify-between ${
+        totalPct > 100 ? "bg-red-50 dark:bg-red-950/30" :
+        totalPct > 85  ? "bg-amber-50 dark:bg-amber-950/30" :
+        "bg-green-50 dark:bg-green-950/30"
+      }`}>
+        <div>
+          <p className="text-xs text-muted-foreground mb-0.5">Total do mês</p>
+          <p className="font-black text-lg">
+            {formatCurrency(totalSpent)}
+            <span className="text-sm font-normal text-muted-foreground"> / {formatCurrency(totalLimit)}</span>
+          </p>
+        </div>
+        <div className="text-right">
+          <p className={`text-2xl font-black ${totalPct > 100 ? "text-red-500" : totalPct > 85 ? "text-amber-500" : "text-green-600"}`}>
+            {totalPct.toFixed(0)}%
+          </p>
+          {overCount > 0 && <p className="text-xs text-red-500">{overCount} categoria{overCount > 1 ? "s" : ""} estourada{overCount > 1 ? "s" : ""}</p>}
+        </div>
+      </div>
+
+      {/* Per category */}
+      <div className="space-y-3">
+        {items.map(item => {
+          const emoji = CAT_EMOJI[item.category_id] ?? "💸"
+          const color = CAT_COLOR[item.category_id] ?? "#6b7280"
+          const barW  = Math.min(item.pct, 100)
+          return (
+            <div key={item.id}>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-sm font-semibold">{emoji} {item.cat?.name ?? item.category_id}</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">{formatCurrency(item.amount_spent)}</span>
+                  <span className="text-xs text-muted-foreground">/</span>
+                  <span className="text-xs text-muted-foreground">{formatCurrency(item.amount_limit)}</span>
+                  <span className={`text-xs font-bold ml-1 ${item.over ? "text-red-500" : "text-green-600"}`}>
+                    {item.over ? `+${(item.pct - 100).toFixed(0)}%` : `-${(100 - item.pct).toFixed(0)}%`}
+                  </span>
+                </div>
+              </div>
+              <div className="h-2 bg-muted/50 rounded-full overflow-hidden">
+                <motion.div
+                  initial={{ width: 0 }} animate={{ width: `${barW}%` }}
+                  transition={{ duration: 0.6, ease: "easeOut" }}
+                  className="h-full rounded-full"
+                  style={{ background: item.over ? "#ef4444" : color }}
+                />
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      <p className="text-xs text-muted-foreground text-center">
+        Os limites são definidos em <strong>Planejar → Meu limite</strong>
+      </p>
+    </div>
+  )
+}
+
+// ─── main page ────────────────────────────────────────────────────────────────
+export default function TransactionsPage() {
+  const [search, setSearch]         = useState("")
+  const [filter, setFilter]         = useState<FilterKey>("all")
+  const [weekOffset, setWeekOffset] = useState(0)
+  const [showCal, setShowCal]       = useState(false)
+  const [calYear, setCalYear]       = useState(new Date().getFullYear())
+  const [calMonth, setCalMonth]     = useState(new Date().getMonth())
+
+  const dailyData  = buildDailyData(weekOffset)
+  const weekLabel  = getWeekLabel(weekOffset)
+  const thisWeek   = getWeekTotal(weekOffset)
+  const prevWeek   = getWeekTotal(weekOffset - 1)
+  const weekDiff   = prevWeek > 0 ? ((thisWeek - prevWeek) / prevWeek) * 100 : 0
+  const monthlyData = buildMonthlyEvolution()
+
+  const catIds = [...new Set(DEMO_TRANSACTIONS.filter(t => t.type === "expense").map(t => t.category_id))]
+  const catTotals = catIds
+    .map(id => ({ id, total: dailyData.reduce((s, row) => s + (Number(row[id]) || 0), 0) }))
+    .filter(c => c.total > 0)
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 6)
+  const grandTotal = catTotals.reduce((s, c) => s + c.total, 0)
+
+  const totalIncome   = DEMO_TRANSACTIONS.filter(t => t.type === "income").reduce((s, t) => s + t.amount, 0)
+  const cashExpense   = DEMO_TRANSACTIONS.filter(t => t.type === "expense" && !t.card_id).reduce((s, t) => s + t.amount, 0)
+  const creditExpense = DEMO_TRANSACTIONS.filter(t => t.type === "expense" && !!t.card_id).reduce((s, t) => s + t.amount, 0)
+
+  const categoryMap = Object.fromEntries(DEMO_CATEGORIES.map(c => [c.id, c]))
+  const accountMap  = Object.fromEntries(DEMO_ACCOUNTS.map(a => [a.id, a]))
+  const cardMap     = Object.fromEntries(DEMO_CARDS.map(c => [c.id, c]))
+
+  const transactions = DEMO_TRANSACTIONS
+    .filter(t => {
+      if (filter === "credit")    return !!t.card_id
+      if (filter === "recurring") return t.is_recurring
+      if (filter === "all")       return true
+      return t.type === (filter as TransactionType)
+    })
+    .filter(t => t.description.toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+
+  function jumpToWeek(date: Date) {
+    const today = new Date(); today.setHours(0,0,0,0)
+    const mondayToday  = getMondayOf(today)
+    const mondayTarget = getMondayOf(date)
+    setWeekOffset(Math.round((mondayTarget.getTime() - mondayToday.getTime()) / (7 * 86400000)))
+    setShowCal(false)
+  }
+
+  const calWeeks  = getCalendarWeeks(calYear, calMonth)
+  const todayStr  = new Date().toISOString().slice(0, 10)
+  const monday    = getMondayOf(new Date()); monday.setDate(monday.getDate() + weekOffset * 7)
+  const sunday    = new Date(monday); sunday.setDate(monday.getDate() + 6)
+
+  return (
+    <div className="max-w-4xl mx-auto p-4 lg:p-6 space-y-5">
+
+      {/* ─── DAILY CHART ─── */}
+      <div className="rounded-3xl border bg-card p-5 space-y-4">
+
+        {/* Header */}
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <p className="font-black text-base">📊 Onde foi seu dinheiro?</p>
+            <p className="text-xs text-muted-foreground">Gastos por dia. Crédito contado no dia que você gastou.</p>
+          </div>
+          <div className="relative">
+            <button onClick={() => setShowCal(v => !v)}
+              className="p-2 rounded-xl bg-muted/60 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
+              <Calendar className="size-4" />
+            </button>
+            <AnimatePresence>
+              {showCal && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95, y: -4 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: -4 }}
+                  className="absolute right-0 top-10 z-50 bg-card border rounded-3xl shadow-xl p-4 w-72"
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <button onClick={() => { const d = new Date(calYear, calMonth-1); setCalYear(d.getFullYear()); setCalMonth(d.getMonth()) }}
+                      className="p-1 rounded-lg hover:bg-muted"><ChevronLeft className="size-4" /></button>
+                    <span className="text-sm font-bold">{MONTH_NAMES[calMonth]} {calYear}</span>
+                    <button onClick={() => { const d = new Date(calYear, calMonth+1); setCalYear(d.getFullYear()); setCalMonth(d.getMonth()) }}
+                      className="p-1 rounded-lg hover:bg-muted"><ChevronRight className="size-4" /></button>
+                  </div>
+                  <div className="grid grid-cols-7 gap-0.5 text-center">
+                    {["S","T","Q","Q","S","S","D"].map((d,i) => (
+                      <div key={i} className="text-[10px] text-muted-foreground font-semibold py-1">{d}</div>
+                    ))}
+                    {calWeeks.flat().map((date, i) => {
+                      const ds = date.toISOString().slice(0, 10)
+                      const inMonth = date.getMonth() === calMonth
+                      const isHighlighted = date >= monday && date <= sunday && inMonth
+                      const isToday = ds === todayStr
+                      return (
+                        <button key={i} onClick={() => jumpToWeek(date)}
+                          className={`text-xs h-7 w-full rounded-lg transition-all font-semibold ${
+                            isHighlighted ? "bg-primary text-white" :
+                            isToday ? "ring-2 ring-primary text-primary" :
+                            inMonth ? "hover:bg-muted text-foreground" : "text-muted-foreground/40"
+                          }`}>{date.getDate()}</button>
+                      )
+                    })}
+                  </div>
+                  <button onClick={() => { setWeekOffset(0); setShowCal(false) }}
+                    className="mt-3 w-full text-xs text-primary font-semibold py-1.5 rounded-xl hover:bg-primary/8">
+                    Ir para esta semana
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
+
+        {/* Week nav + summary */}
+        <div className="flex items-center justify-between">
+          <button onClick={() => setWeekOffset(v => v - 1)}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-muted/60 hover:bg-muted text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <ChevronLeft className="size-3.5" />Anterior
+          </button>
+          <div className="text-center">
+            <p className="text-sm font-bold">{weekLabel}</p>
+            <div className="flex items-center justify-center gap-1.5 mt-0.5">
+              <span className="text-sm font-black">{formatCurrency(thisWeek)}</span>
+              {prevWeek > 0 && (
+                <span className={`flex items-center gap-0.5 text-[11px] font-bold px-1.5 py-0.5 rounded-full ${
+                  weekDiff > 0 ? "bg-red-100 text-red-600 dark:bg-red-950/40 dark:text-red-400"
+                               : "bg-green-100 text-green-600 dark:bg-green-950/40 dark:text-green-400"
+                }`}>
+                  {weekDiff > 0 ? <ArrowUp className="size-2.5" /> : <ArrowDown className="size-2.5" />}
+                  {Math.abs(weekDiff).toFixed(0)}% vs anterior
+                </span>
+              )}
+            </div>
+          </div>
+          <button onClick={() => setWeekOffset(v => Math.min(v + 1, 0))}
+            disabled={weekOffset >= 0}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-muted/60 hover:bg-muted text-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30">
+            Próxima<ChevronRight className="size-3.5" />
+          </button>
+        </div>
+
+        {/* Bar chart — 7 days, thin bars */}
+        <div className="h-44">
+          <ResponsiveContainer width="99%" height="100%">
+            <BarChart data={dailyData} margin={{ top: 4, right: 4, bottom: 0, left: 4 }} barSize={22}>
+              <XAxis
+                dataKey="day"
+                tick={({ x, y, payload, index }: any) => {
+                  const row = dailyData[index]
+                  return (
+                    <g transform={`translate(${x},${y})`}>
+                      <text x={0} y={0} dy={12} textAnchor="middle" fontSize={11}
+                        fill={row?.isToday ? "#7c3aed" : "#6b7280"}
+                        fontWeight={row?.isToday ? 800 : 400}>{payload.value}</text>
+                      <text x={0} y={0} dy={24} textAnchor="middle" fontSize={9} fill="#9ca3af">
+                        {(row as any)?.dayNum}/{(row as any)?.month}
+                      </text>
+                    </g>
+                  )
+                }}
+                height={32} axisLine={false} tickLine={false}
+              />
+              <YAxis hide />
+              <Tooltip
+                formatter={(v: unknown, name: unknown) => {
+                  const cat = DEMO_CATEGORIES.find(c => c.id === String(name))
+                  return [formatCurrency(Number(v)), `${CAT_EMOJI[String(name)] ?? "💸"} ${cat?.name ?? String(name)}`]
+                }}
+                labelFormatter={(_: unknown, payload: any[]) => {
+                  if (payload?.[0]) { const r = payload[0].payload as any; return `${r.day}, ${r.dayNum}/${r.month}` }
+                  return ""
+                }}
+                contentStyle={{ fontSize: 11, borderRadius: 12, border: "1px solid #e5e7eb" }}
+              />
+              {catTotals.map((c, idx) => (
+                <Bar key={c.id} dataKey={c.id} stackId="a"
+                  fill={CAT_COLOR[c.id] ?? "#6b7280"}
+                  radius={idx === catTotals.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]}
+                />
+              ))}
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Legend */}
+        <div className="grid grid-cols-3 gap-x-4 gap-y-1.5">
+          {catTotals.map(c => {
+            const cat = DEMO_CATEGORIES.find(x => x.id === c.id)
+            const pct = grandTotal > 0 ? Math.round((c.total / grandTotal) * 100) : 0
+            return (
+              <div key={c.id} className="flex items-center gap-1.5 text-xs">
+                <div className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: CAT_COLOR[c.id] ?? "#6b7280" }} />
+                <span className="text-muted-foreground truncate">{CAT_EMOJI[c.id] ?? "💸"} {cat?.name ?? c.id}</span>
+                <span className="font-bold ml-auto shrink-0">{pct}%</span>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* ─── MONTHLY EVOLUTION ─── */}
+      <div className="rounded-3xl border bg-card p-5 space-y-4">
+        <div>
+          <p className="font-black text-base">📅 Evolução mensal</p>
+          <p className="text-xs text-muted-foreground">Gastos e entradas dos últimos 5 meses.</p>
+        </div>
+        <div className="h-44">
+          <ResponsiveContainer width="99%" height="100%">
+            <BarChart data={monthlyData} margin={{ top: 4, right: 4, bottom: 0, left: 4 }} barSize={16} barGap={4}>
+              <XAxis dataKey="label" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis hide />
+              <Tooltip
+                formatter={(v: unknown, name: unknown) =>
+                  [formatCurrency(Number(v)), name === "gastos" ? "💸 Saiu" : "💚 Entrou"]
+                }
+                contentStyle={{ fontSize: 11, borderRadius: 12, border: "1px solid #e5e7eb" }}
+              />
+              <Bar dataKey="entradas" fill="#10B981" radius={[4,4,0,0]} name="entradas" />
+              <Bar dataKey="gastos"   fill="#7c3aed" radius={[4,4,0,0]} name="gastos" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="flex items-center gap-4 text-xs">
+          <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-[#10B981]" /><span className="text-muted-foreground">Entrou</span></div>
+          <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-[#7c3aed]" /><span className="text-muted-foreground">Saiu</span></div>
+        </div>
+      </div>
+
+      {/* ─── EXPECTATIVA x REALIDADE ─── */}
+      <BudgetVsReal />
+
+      {/* ─── SUMMARY ─── */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="rounded-2xl bg-green-50 dark:bg-green-950/30 p-3.5">
+          <div className="flex items-center gap-1.5 mb-1">
+            <TrendingUp className="size-3.5 text-green-500" />
+            <p className="text-xs text-muted-foreground">Entrou</p>
+          </div>
+          <p className="text-sm font-black text-green-600 dark:text-green-400">{formatCurrency(totalIncome)}</p>
+        </div>
+        <div className="rounded-2xl bg-red-50 dark:bg-red-950/30 p-3.5">
+          <div className="flex items-center gap-1.5 mb-1">
+            <TrendingDown className="size-3.5 text-red-500" />
+            <p className="text-xs text-muted-foreground">Saiu (à vista)</p>
+          </div>
+          <p className="text-sm font-black text-red-500">{formatCurrency(cashExpense)}</p>
+        </div>
+        <div className="rounded-2xl p-3.5" style={{ background: "#7c3aed18" }}>
+          <div className="flex items-center gap-1.5 mb-1">
+            <span className="text-xs">💳</span>
+            <p className="text-xs text-muted-foreground">No crédito</p>
+          </div>
+          <p className="text-sm font-black" style={{ color: "#7c3aed" }}>{formatCurrency(creditExpense)}</p>
+          <p className="text-[10px] text-muted-foreground mt-0.5">vai pra fatura</p>
+        </div>
+      </div>
+
+      {/* ─── HISTORY ─── */}
+      <div className="space-y-3">
+        <div className="space-y-2">
+          <div className="relative">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+            <Input placeholder="Buscar..." className="pl-10 rounded-2xl border-border/60"
+              value={search} onChange={e => setSearch(e.target.value)} />
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            {FILTERS.map(({ key, label }) => (
+              <button key={key} onClick={() => setFilter(key)}
+                className={`px-4 py-2 rounded-2xl text-sm font-semibold transition-all ${
+                  filter === key ? "text-white" : "bg-muted/60 text-muted-foreground hover:bg-muted"
+                }`}
+                style={filter === key ? { background: "linear-gradient(135deg,#7c3aed,#6d28d9)" } : {}}
+              >{label}</button>
+            ))}
+          </div>
+        </div>
+
+        <AnimatePresence>
+          {transactions.map((t, i) => {
+            const cat    = categoryMap[t.category_id]
+            const acc    = accountMap[t.account_id]
+            const card   = t.card_id ? cardMap[t.card_id] : null
+            const emoji  = CAT_EMOJI[t.category_id] ?? "💸"
+            const isIncome = t.type === "income"
+
+            return (
+              <motion.div key={t.id}
+                initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 8 }}
+                transition={{ delay: i * 0.03 }}
+                className="rounded-2xl border bg-card p-4 flex items-center gap-3"
+              >
+                <div className="w-11 h-11 rounded-2xl flex items-center justify-center text-xl shrink-0"
+                     style={{ backgroundColor: `${cat?.color ?? "#6b7280"}18` }}>{emoji}</div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold truncate">{t.description}</p>
+                  <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                    <span className="text-xs text-muted-foreground">{formatDate(t.date, "short")}</span>
+                    {cat && <span className="text-xs bg-muted/70 px-2 py-0.5 rounded-full text-muted-foreground">{cat.name}</span>}
+                    {card && <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold" style={{ background: "#7c3aed18", color: "#7c3aed" }}>💳 {card.name}</span>}
+                    {t.is_recurring && <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">🔁 fixo</span>}
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className={`text-sm font-bold ${isIncome ? "text-green-600 dark:text-green-400" : card ? "text-purple-600 dark:text-purple-400" : "text-foreground"}`}>
+                    {isIncome ? "+" : "-"}{formatCurrency(t.amount)}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {card ? "fatura" : acc ? acc.name.split(" ")[0] : ""}
+                  </p>
+                </div>
+              </motion.div>
+            )
+          })}
+        </AnimatePresence>
+
+        {transactions.length === 0 && (
+          <div className="text-center py-10 text-muted-foreground text-sm">
+            Nenhuma movimentação encontrada
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}

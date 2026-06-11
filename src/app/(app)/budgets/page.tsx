@@ -1,0 +1,172 @@
+"use client"
+
+import { motion } from "framer-motion"
+import { Plus } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { formatCurrency, getMonthName } from "@/lib/utils"
+import { DEMO_BUDGET_ITEMS, DEMO_CATEGORIES } from "@/lib/demo-data"
+
+const CATEGORY_EMOJI: Record<string, string> = {
+  "cat-housing":    "🏠",
+  "cat-food":       "🍔",
+  "cat-market":     "🛒",
+  "cat-transport":  "🚗",
+  "cat-health":     "💊",
+  "cat-education":  "📚",
+  "cat-leisure":    "🎮",
+  "cat-subs":       "📱",
+  "cat-internet":   "📡",
+  "cat-gym":        "🏋️",
+  "cat-other":      "💸",
+}
+
+function RingProgress({ percent, color, size = 64 }: { percent: number; color: string; size?: number }) {
+  const r = (size - 10) / 2
+  const circ = 2 * Math.PI * r
+  const dash = Math.min(percent / 100, 1) * circ
+  const isOver = percent > 100
+
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="rotate-[-90deg]">
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="currentColor" strokeWidth={5} className="text-muted/60" />
+      <circle
+        cx={size / 2} cy={size / 2} r={r} fill="none"
+        stroke={isOver ? "#ef4444" : percent > 80 ? "#f59e0b" : color}
+        strokeWidth={5} strokeLinecap="round"
+        strokeDasharray={`${dash} ${circ}`}
+        style={{ transition: "stroke-dasharray 0.8s ease" }}
+      />
+    </svg>
+  )
+}
+
+export default function BudgetsPage() {
+  const now = new Date()
+  const monthName = getMonthName(now.getMonth())
+  const year = now.getFullYear()
+
+  const items = DEMO_BUDGET_ITEMS.map((item) => {
+    const cat = DEMO_CATEGORIES.find((c) => c.id === item.category_id)
+    const percent = (item.amount_spent / item.amount_limit) * 100
+    return {
+      ...item,
+      cat,
+      emoji: CATEGORY_EMOJI[item.category_id] ?? "💸",
+      percent,
+      isOver: item.amount_spent > item.amount_limit,
+      remaining: item.amount_limit - item.amount_spent,
+    }
+  }).sort((a, b) => b.percent - a.percent)
+
+  const totalLimit = items.reduce((s, i) => s + i.amount_limit, 0)
+  const totalSpent = items.reduce((s, i) => s + i.amount_spent, 0)
+  const totalPercent = (totalSpent / totalLimit) * 100
+  const overCount = items.filter((i) => i.isOver).length
+
+  return (
+    <div className="p-4 lg:p-6 space-y-5 max-w-4xl mx-auto">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Orçamento</h1>
+          <p className="text-sm text-muted-foreground">{monthName} {year}</p>
+        </div>
+        <Button size="sm" className="gap-1.5 rounded-xl nexo-gradient border-0 text-white shadow-sm shadow-primary/30">
+          <Plus className="size-4" />Nova
+        </Button>
+      </div>
+
+      {/* Overview hero */}
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        className={`rounded-3xl p-5 ${overCount > 0 ? "bg-red-50 dark:bg-red-950/20" : "bg-green-50 dark:bg-green-950/20"}`}
+      >
+        <div className="flex items-center gap-5">
+          <div className="relative shrink-0">
+            <RingProgress percent={totalPercent} color="#8b5cf6" size={80} />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className="text-xs font-bold">{Math.round(totalPercent)}%</span>
+            </div>
+          </div>
+          <div className="flex-1">
+            {overCount > 0 ? (
+              <p className="text-base font-bold text-red-600 dark:text-red-400">
+                {overCount} {overCount === 1 ? "categoria estourada" : "categorias estouradas"} 😬
+              </p>
+            ) : (
+              <p className="text-base font-bold text-green-700 dark:text-green-400">Dentro do limite! 🎉</p>
+            )}
+            <p className="text-sm text-muted-foreground mt-0.5">
+              <span className="font-semibold text-foreground">{formatCurrency(totalSpent)}</span>
+              {" "}de{" "}
+              <span className="font-semibold text-foreground">{formatCurrency(totalLimit)}</span>
+              {" "}gastos
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Sobram {formatCurrency(Math.max(totalLimit - totalSpent, 0))} no orçamento total
+            </p>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Category cards */}
+      <div className="grid grid-cols-1 gap-3">
+        {items.map((item, i) => (
+          <motion.div
+            key={item.id}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.05 }}
+            className={`rounded-3xl border bg-card p-4 flex items-center gap-4 ${item.isOver ? "border-red-200 dark:border-red-900" : ""}`}
+          >
+            {/* Ring */}
+            <div className="relative shrink-0">
+              <RingProgress percent={item.percent} color={item.cat?.color ?? "#6b7280"} size={56} />
+              <div className="absolute inset-0 flex items-center justify-center text-xl">
+                {item.emoji}
+              </div>
+            </div>
+
+            {/* Info */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-sm">{item.cat?.name ?? "Outros"}</span>
+                {item.isOver && (
+                  <span className="text-xs bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 px-2 py-0.5 rounded-full font-medium">
+                    Estourado
+                  </span>
+                )}
+                {!item.isOver && item.percent >= 80 && (
+                  <span className="text-xs bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded-full font-medium">
+                    Quase lá
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {item.isOver
+                  ? `⚠️ Passou ${formatCurrency(Math.abs(item.remaining))} do limite`
+                  : item.remaining === 0
+                  ? "✅ Limite exato!"
+                  : `Restam ${formatCurrency(item.remaining)}`}
+              </p>
+            </div>
+
+            {/* Values */}
+            <div className="text-right shrink-0">
+              <p className={`text-sm font-bold ${item.isOver ? "text-red-500" : ""}`}>
+                {formatCurrency(item.amount_spent)}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                de {formatCurrency(item.amount_limit)}
+              </p>
+            </div>
+          </motion.div>
+        ))}
+      </div>
+
+      <button className="w-full py-3 rounded-2xl border-2 border-dashed border-muted-foreground/20 text-sm text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors">
+        + Copiar orçamento do mês anterior
+      </button>
+    </div>
+  )
+}

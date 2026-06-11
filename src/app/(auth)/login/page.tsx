@@ -89,17 +89,6 @@ export default function LoginPage() {
           </Button>
         </form>
 
-        <div className="relative my-4">
-          <div className="absolute inset-0 flex items-center"><div className="w-full border-t" /></div>
-          <div className="relative flex justify-center text-xs text-muted-foreground">
-            <span className="bg-card px-2">ou</span>
-          </div>
-        </div>
-
-        <Button variant="outline" className="w-full" onClick={handleDemo}>
-          Explorar com dados de demonstração
-        </Button>
-
         <p className="text-center text-sm text-muted-foreground mt-4">
           Não tem conta?{" "}
           <Link href="/register" className="text-primary font-medium hover:underline">Criar conta grátis</Link>

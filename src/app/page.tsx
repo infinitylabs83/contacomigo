@@ -223,11 +223,6 @@ export default function LandingPage() {
             ))}
           </motion.div>
 
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }}>
-            <ButtonLink href="/dashboard" variant="outline" className="rounded-2xl gap-2 text-sm">
-              Ver demonstração ao vivo →
-            </ButtonLink>
-          </motion.div>
         </div>
 
         <motion.div initial={{ opacity: 0, scale: 0.9, y: 30 }} animate={{ opacity: 1, scale: 1, y: 0 }}

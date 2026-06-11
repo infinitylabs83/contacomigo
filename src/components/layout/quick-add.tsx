@@ -123,7 +123,7 @@ export function QuickAdd() {
     try {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+      if (!user) { setSaving(false); return }
 
       const today = new Date().toISOString().split("T")[0]
       const label = description.trim() || selectedCat?.label || (mode === "expense" ? "Gasto" : "Receita")
@@ -142,27 +142,47 @@ export function QuickAdd() {
         }
       }
 
+      // Campos mínimos garantidos (sem campos opcionais que podem não existir na tabela)
       const transaction: Record<string, unknown> = {
-        user_id:        user.id,
-        type:           mode,
-        description:    label,
-        amount:         parsed,
-        date:           today,
-        account_id:     resolvedAccountId,
-        status:         "confirmed",
-        is_installment: payMethod === "credit" && installments > 1,
-        installment_total: payMethod === "credit" ? installments : null,
-        installment_current: payMethod === "credit" ? 1 : null,
-        is_recurring:   isRecurring,
-        tags:           [],
-        notes:          selectedCat ? `${selectedCat.emoji}|${selectedCat.label}` : null,
+        user_id:     user.id,
+        type:        mode,
+        description: label,
+        amount:      parsed,
+        date:        today,
+        account_id:  resolvedAccountId,
+        status:      "confirmed",
+        notes:       selectedCat ? `${selectedCat.emoji}|${selectedCat.label}` : null,
       }
 
+      // Campos opcionais — só adiciona se não causar erro
+      if (payMethod === "credit" && installments > 1) {
+        transaction.is_installment     = true
+        transaction.installment_total   = installments
+        transaction.installment_current = 1
+      }
       if (payMethod === "credit" && creditCardId) {
         transaction.card_id = creditCardId
       }
+      if (isRecurring) {
+        transaction.is_recurring = true
+      }
 
-      await supabase.from("transactions").insert(transaction)
+      const { error } = await supabase.from("transactions").insert(transaction)
+
+      if (error) {
+        // Tenta salvar sem campos opcionais que podem não existir
+        const { error: error2 } = await supabase.from("transactions").insert({
+          user_id:     user.id,
+          type:        mode,
+          description: label,
+          amount:      parsed,
+          date:        today,
+          account_id:  resolvedAccountId,
+          status:      "confirmed",
+          notes:       selectedCat ? `${selectedCat.emoji}|${selectedCat.label}` : null,
+        })
+        if (error2) { setSaving(false); return }
+      }
 
       window.dispatchEvent(new CustomEvent("transaction-added"))
 

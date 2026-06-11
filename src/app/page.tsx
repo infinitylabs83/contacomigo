@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useTheme } from "next-themes"
 import { motion, useInView } from "framer-motion"
 import { useRef } from "react"
 import Link from "next/link"
@@ -155,11 +156,19 @@ function FAQ() {
 
 /* ─── PAGE ─────────────────────────────────────────── */
 export default function LandingPage() {
+  const { setTheme, resolvedTheme } = useTheme()
+
+  useEffect(() => {
+    const prev = document.documentElement.classList.contains("dark") ? "dark" : "light"
+    document.documentElement.classList.remove("dark")
+    return () => { if (prev === "dark") document.documentElement.classList.add("dark") }
+  }, [])
+
   return (
-    <div className="min-h-screen bg-background text-foreground overflow-x-hidden">
+    <div className="min-h-screen overflow-x-hidden" style={{ background: "#faf9f7", color: "#111827" }}>
 
       {/* NAV */}
-      <nav className="sticky top-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-md">
+      <nav className="sticky top-0 z-50 border-b backdrop-blur-md" style={{ borderColor: "rgba(0,0,0,0.08)", background: "rgba(250,249,247,0.85)" }}>
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-4">
           <Link href="/" className="flex items-center gap-2.5">
             <Logo />

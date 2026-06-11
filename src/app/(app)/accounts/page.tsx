@@ -352,14 +352,49 @@ function CardSheet({ card, userId, onClose, onSave }: {
 
 function TabCartoes({ userId }: { userId: string }) {
   const [cards, setCards] = useState<any[]>([])
+  const [cardTxns, setCardTxns] = useState<Record<string, any[]>>({})
   const [sheet, setSheet] = useState<"add" | any | null>(null)
+  const [expandedCard, setExpandedCard] = useState<string | null>(null)
+
   useEffect(() => {
-    createClient().from("credit_cards").select("*").order("created_at", { ascending: true })
-      .then(({ data }) => setCards(data ?? []))
+    loadCards()
     const handler = () => setSheet("add")
     window.addEventListener("accounts-add-cartoes", handler)
-    return () => window.removeEventListener("accounts-add-cartoes", handler)
-  }, [])
+    window.addEventListener("transaction-added", loadCards)
+    return () => {
+      window.removeEventListener("accounts-add-cartoes", handler)
+      window.removeEventListener("transaction-added", loadCards)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function loadCards() {
+    const supabase = createClient()
+    const { data: cardData } = await supabase.from("credit_cards").select("*").order("created_at", { ascending: true })
+    if (!cardData) return
+    setCards(cardData)
+
+    // For each card, fetch transactions in current billing period
+    const now = new Date()
+    const txnsMap: Record<string, any[]> = {}
+    for (const card of cardData) {
+      const closing = card.closing_day ?? 3
+      // Current period: from last closing_day to today
+      const periodStart = new Date(now.getFullYear(), now.getMonth(), closing)
+      if (periodStart > now) periodStart.setMonth(periodStart.getMonth() - 1)
+      const startStr = periodStart.toISOString().split("T")[0]
+
+      const { data: txns } = await supabase
+        .from("transactions")
+        .select("id,description,amount,date,notes")
+        .eq("card_id", card.id)
+        .eq("type", "expense")
+        .gte("date", startStr)
+        .order("date", { ascending: false })
+      txnsMap[card.id] = txns ?? []
+    }
+    setCardTxns(txnsMap)
+  }
+
   const today = new Date()
 
   function handleSaved(saved: any) {
@@ -385,14 +420,17 @@ function TabCartoes({ userId }: { userId: string }) {
       ) : (
         <>
           {cards.map((card, idx) => {
-            const usedPct = Math.min(((card.limit_used ?? 0) / (card.limit_total ?? 1)) * 100, 100)
-            const available = (card.limit_total ?? 0) - (card.limit_used ?? 0)
+            const txns = cardTxns[card.id] ?? []
+            const realUsed = txns.reduce((s, t) => s + (t.amount ?? 0), 0)
+            const usedPct = Math.min((realUsed / (card.limit_total ?? 1)) * 100, 100)
+            const available = (card.limit_total ?? 0) - realUsed
             const dueDate = new Date(today.getFullYear(), today.getMonth(), card.due_day)
             if (dueDate < today) dueDate.setMonth(dueDate.getMonth() + 1)
             const daysUntilDue = Math.ceil((dueDate.getTime() - today.getTime()) / 86400000)
             const isUrgent = daysUntilDue <= 5
             const ringC = 2 * Math.PI * 30
             const dash = (usedPct / 100) * ringC
+            const isExpanded = expandedCard === card.id
             return (
               <motion.div key={card.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: idx * 0.08 }}
@@ -414,8 +452,8 @@ function TabCartoes({ userId }: { userId: string }) {
                     </div>
                   </div>
                   <div className="relative">
-                    <p className="text-white/70 text-xs mb-1">Fatura atual</p>
-                    <MoneyText value={card.limit_used} size="xl" className="text-white font-black" />
+                    <p className="text-white/70 text-xs mb-1">Fatura atual (desde dia {card.closing_day ?? 3})</p>
+                    <MoneyText value={realUsed} size="xl" className="text-white font-black" />
                   </div>
                 </div>
                 {isUrgent && (
@@ -439,10 +477,10 @@ function TabCartoes({ userId }: { userId: string }) {
                         <span className="text-xs font-black">{Math.round(usedPct)}%</span>
                       </div>
                     </div>
-                    <div className="space-y-1 text-sm">
+                    <div className="space-y-1 text-sm flex-1">
                       <div className="flex justify-between gap-8">
                         <span className="text-muted-foreground">Usado</span>
-                        <span className="font-semibold">{formatCurrency(card.limit_used)}</span>
+                        <span className="font-semibold">{formatCurrency(realUsed)}</span>
                       </div>
                       <div className="flex justify-between gap-8">
                         <span className="text-muted-foreground">Disponível</span>
@@ -454,6 +492,30 @@ function TabCartoes({ userId }: { userId: string }) {
                       </div>
                     </div>
                   </div>
+
+                  {/* Transactions toggle */}
+                  {txns.length > 0 && (
+                    <button onClick={() => setExpandedCard(isExpanded ? null : card.id)}
+                      className="w-full text-xs text-primary font-semibold py-1.5 hover:bg-primary/5 rounded-xl transition-colors">
+                      {isExpanded ? "▲ Ocultar lançamentos" : `▼ Ver ${txns.length} lançamento${txns.length > 1 ? "s" : ""} da fatura`}
+                    </button>
+                  )}
+                  <AnimatePresence>
+                    {isExpanded && (
+                      <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
+                        className="overflow-hidden space-y-1.5">
+                        {txns.map(t => (
+                          <div key={t.id} className="flex items-center justify-between text-xs bg-muted/30 rounded-xl px-3 py-2">
+                            <div>
+                              <p className="font-semibold">{t.description}</p>
+                              <p className="text-muted-foreground">{new Date(t.date + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}</p>
+                            </div>
+                            <span className="font-bold text-red-500">-{formatCurrency(t.amount)}</span>
+                          </div>
+                        ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               </motion.div>
             )
@@ -475,6 +537,96 @@ function TabCartoes({ userId }: { userId: string }) {
         )}
       </AnimatePresence>
     </div>
+  )
+}
+
+// ─── Debt Projection ─────────────────────────────────────────────────────────
+
+function DebtProjection({ debt, onClose, onEdit }: { debt: any; onClose: () => void; onEdit: () => void }) {
+  const rate = (debt.interest_rate ?? 0) / 100
+  const payment = debt.monthly_payment ?? 0
+
+  // Amortization table
+  const rows: { month: number; balance: number; interest: number; principal: number; date: string }[] = []
+  let balance = debt.current_balance ?? 0
+  const now = new Date()
+  for (let m = 0; m < 360 && balance > 0.01; m++) {
+    const interest = balance * rate
+    const principal = Math.min(payment - interest, balance)
+    if (principal <= 0) break
+    const d = new Date(now.getFullYear(), now.getMonth() + m + 1, 1)
+    rows.push({
+      month: m + 1,
+      balance: Math.max(balance - principal, 0),
+      interest,
+      principal,
+      date: d.toLocaleDateString("pt-BR", { month: "short", year: "2-digit" }),
+    })
+    balance = Math.max(balance - principal, 0)
+  }
+
+  const totalInterest = rows.reduce((s, r) => s + r.interest, 0)
+  const lastRow = rows[rows.length - 1]
+  const payoffDate = lastRow
+    ? new Date(now.getFullYear(), now.getMonth() + rows.length, 1).toLocaleDateString("pt-BR", { month: "long", year: "numeric" })
+    : "—"
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-end lg:items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <motion.div initial={{ y: 80, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 80, opacity: 0 }}
+        className="w-full max-w-md bg-card rounded-3xl shadow-2xl max-h-[90dvh] overflow-y-auto"
+        onClick={e => e.stopPropagation()}>
+        <div className="p-5 border-b flex items-center justify-between sticky top-0 bg-card z-10">
+          <div>
+            <h2 className="font-black text-base">{debt.name}</h2>
+            <p className="text-xs text-muted-foreground">{DEBT_EMOJI[debt.type ?? "other"]} {debt.creditor}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={onEdit} className="p-2 rounded-xl hover:bg-muted text-muted-foreground"><Pencil className="size-3.5" /></button>
+            <button onClick={onClose} className="p-2 rounded-xl hover:bg-muted text-muted-foreground"><X className="size-4" /></button>
+          </div>
+        </div>
+
+        <div className="p-5 space-y-4">
+          {/* Summary cards */}
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="rounded-2xl bg-muted/50 p-3">
+              <p className="text-[10px] text-muted-foreground mb-1">Parcelas restantes</p>
+              <p className="font-black text-lg">{rows.length}</p>
+            </div>
+            <div className="rounded-2xl bg-red-50 dark:bg-red-950/20 p-3">
+              <p className="text-[10px] text-muted-foreground mb-1">Total de juros</p>
+              <p className="font-black text-sm text-red-500">{formatCurrency(totalInterest)}</p>
+            </div>
+            <div className="rounded-2xl bg-green-50 dark:bg-green-950/20 p-3">
+              <p className="text-[10px] text-muted-foreground mb-1">Quitação</p>
+              <p className="font-black text-[11px] text-green-600 dark:text-green-400 leading-tight">{payoffDate}</p>
+            </div>
+          </div>
+
+          {/* Amortization table - first 12 months */}
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground mb-2">Projeção mês a mês</p>
+            <div className="space-y-1.5">
+              {rows.slice(0, 24).map(r => (
+                <div key={r.month} className="flex items-center gap-2 text-xs rounded-xl bg-muted/30 px-3 py-2">
+                  <span className="w-10 font-bold text-muted-foreground shrink-0">{r.date}</span>
+                  <div className="flex-1 flex justify-between gap-2">
+                    <span className="text-red-400">-{formatCurrency(r.interest)} juros</span>
+                    <span className="font-semibold">{formatCurrency(r.balance)} restante</span>
+                  </div>
+                </div>
+              ))}
+              {rows.length > 24 && (
+                <p className="text-center text-xs text-muted-foreground py-2">... e mais {rows.length - 24} meses</p>
+              )}
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
   )
 }
 
@@ -597,6 +749,7 @@ function DebtSheet({ debt, userId, onClose, onSave }: {
 function TabDevo({ userId }: { userId: string }) {
   const [debts, setDebts] = useState<any[]>([])
   const [sheet, setSheet] = useState<"add" | any | null>(null)
+  const [projecting, setProjecting] = useState<any | null>(null)
   useEffect(() => {
     createClient().from("debts").select("*").order("created_at", { ascending: false })
       .then(({ data }) => setDebts(data ?? []))
@@ -663,7 +816,9 @@ function TabDevo({ userId }: { userId: string }) {
             const d2 = (pct / 100) * r2
             return (
               <motion.div key={debt.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.07 }} className="rounded-3xl border bg-card p-5">
+                transition={{ delay: i * 0.07 }}
+                className="rounded-3xl border bg-card p-5 cursor-pointer active:scale-[0.99] transition-transform"
+                onClick={() => setProjecting(debt)}>
                 <div className="flex items-center gap-3 mb-3">
                   <div className="relative shrink-0">
                     <svg width="52" height="52" viewBox="0 0 52 52">
@@ -685,7 +840,7 @@ function TabDevo({ userId }: { userId: string }) {
                       <p className="font-black text-base text-red-500">{formatCurrency(debt.current_balance)}</p>
                       <p className="text-xs text-muted-foreground">restante</p>
                     </div>
-                    <button onClick={() => setSheet(debt)} className="p-2 rounded-xl hover:bg-muted text-muted-foreground">
+                    <button onClick={e => { e.stopPropagation(); setSheet(debt) }} className="p-2 rounded-xl hover:bg-muted text-muted-foreground">
                       <Pencil className="size-3.5" />
                     </button>
                   </div>
@@ -694,6 +849,7 @@ function TabDevo({ userId }: { userId: string }) {
                   <span>Parcela: <strong className="text-foreground">{formatCurrency(debt.monthly_payment)}/mês</strong></span>
                   <span>Juros: <strong className="text-red-500">{(debt.interest_rate ?? 0).toFixed(1)}%</strong></span>
                 </div>
+                <p className="text-center text-[10px] text-muted-foreground mt-2">Toque para ver projeção de parcelas →</p>
               </motion.div>
             )
           })}
@@ -710,6 +866,15 @@ function TabDevo({ userId }: { userId: string }) {
             userId={userId}
             onClose={() => setSheet(null)}
             onSave={handleSaved}
+          />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {projecting !== null && (
+          <DebtProjection
+            debt={projecting}
+            onClose={() => setProjecting(null)}
+            onEdit={() => { setSheet(projecting); setProjecting(null) }}
           />
         )}
       </AnimatePresence>
@@ -909,21 +1074,31 @@ function TabAssino({ userId }: { userId: string }) {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold">{t.name}</p>
-                  <div className="flex items-center gap-2 mt-0.5">
+                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                     <span className="text-xs text-muted-foreground">🔁 {t.billing_cycle === "yearly" ? "anual" : t.billing_cycle === "quarterly" ? "trimestral" : "todo mês"}</span>
+                    {t.billing_day && <span className="text-xs text-muted-foreground">· dia {t.billing_day}</span>}
                     {t._fromTxn && <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">via lançamento</span>}
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="text-right shrink-0">
+                <div className="flex items-center gap-1">
+                  <div className="text-right shrink-0 mr-1">
                     <p className="text-sm font-bold">{formatCurrency(t.amount)}</p>
                     <p className="text-xs text-muted-foreground">/{t.billing_cycle === "yearly" ? "ano" : t.billing_cycle === "quarterly" ? "trim" : "mês"}</p>
                   </div>
-                  {!t._fromTxn && (
-                    <button onClick={() => setSheet(t)} className="p-2 rounded-xl hover:bg-muted text-muted-foreground">
-                      <Pencil className="size-3.5" />
-                    </button>
-                  )}
+                  {!t._fromTxn ? (
+                    <>
+                      <button onClick={() => setSheet(t)} className="p-2 rounded-xl hover:bg-muted text-muted-foreground">
+                        <Pencil className="size-3.5" />
+                      </button>
+                      <button onClick={async () => {
+                        const supabase = createClient()
+                        await supabase.from("subscriptions").delete().eq("id", t.id)
+                        setSubs(prev => prev.filter(s => s.id !== t.id))
+                      }} className="p-2 rounded-xl hover:bg-red-50 text-muted-foreground hover:text-red-500">
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    </>
+                  ) : null}
                 </div>
               </motion.div>
             ))}

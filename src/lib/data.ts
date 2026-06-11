@@ -81,8 +81,8 @@ export async function getGamification() {
   const { data } = await supabase
     .from("gamification")
     .select("*")
-    .single()
-  return data
+    .maybeSingle()
+  return data ?? null
 }
 
 export async function getDashboardData() {

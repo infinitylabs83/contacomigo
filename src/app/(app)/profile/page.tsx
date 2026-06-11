@@ -3,14 +3,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { HealthScore } from "@/components/ui/health-score"
 import { getUser, getGamification } from "@/lib/data"
-import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
+import { signOut } from "./actions"
 
 const levelNames = ["Iniciante", "Curioso", "Organizado", "Consciente", "Estrategista", "Mestre Financeiro"]
 
 export default async function ProfilePage() {
   const user = await getUser()
-  if (!user) redirect("/login")
+  if (!user) return redirect("/login")
 
   const gamification = await getGamification()
 
@@ -18,10 +18,10 @@ export default async function ProfilePage() {
   const total_points  = gamification?.total_points  ?? 0
   const level         = gamification?.level         ?? 1
   const streak_days   = gamification?.streak_days   ?? 0
-  const achievements  = gamification?.achievements  ?? []
+  const achievements  = (gamification?.achievements ?? []) as any[]
 
-  const fullName = (user.user_metadata?.full_name as string) ?? ""
-  const email    = user.email ?? ""
+  const fullName = ((user as any).user_metadata?.full_name as string) ?? ""
+  const email    = (user as any).email ?? ""
   const levelName = levelNames[Math.min(level - 1, levelNames.length - 1)]
 
   return (
@@ -87,7 +87,7 @@ export default async function ProfilePage() {
           <div className="flex items-center justify-between py-2 border-b">
             <span className="text-sm text-muted-foreground">Membro desde</span>
             <span className="text-sm font-medium">
-              {new Date(user.created_at).toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}
+              {new Date((user as any).created_at).toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}
             </span>
           </div>
           <div className="flex items-center justify-between py-2">
@@ -123,12 +123,7 @@ export default async function ProfilePage() {
       </Card>
 
       {/* Sair */}
-      <form action={async () => {
-        "use server"
-        const supabase = await createClient()
-        await supabase.auth.signOut()
-        redirect("/login")
-      }}>
+      <form action={signOut}>
         <button type="submit"
           className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-sm font-semibold text-red-600 border border-red-200 bg-red-50 hover:bg-red-100 transition-colors">
           <LogOut size={16} /> Sair da conta

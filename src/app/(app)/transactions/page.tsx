@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Search, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, Calendar, ArrowUp, ArrowDown } from "lucide-react"
+import { Search, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, Calendar, ArrowUp, ArrowDown, Pencil, Trash2, X, Check } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid } from "recharts"
 import { formatCurrency, formatDate } from "@/lib/utils"
@@ -333,6 +333,215 @@ function BudgetVsReal({ transactions }: { transactions: any[] }) {
   )
 }
 
+// ─── Transaction Edit Sheet ───────────────────────────────────────────────────
+
+const ALL_CATS = [
+  { id: "cat-food",      emoji: "🍔", label: "Comida",      type: "expense" },
+  { id: "cat-market",    emoji: "🛒", label: "Mercado",     type: "expense" },
+  { id: "cat-transport", emoji: "🚗", label: "Transporte",  type: "expense" },
+  { id: "cat-housing",   emoji: "🏠", label: "Moradia",     type: "expense" },
+  { id: "cat-health",    emoji: "💊", label: "Saúde",       type: "expense" },
+  { id: "cat-pet",       emoji: "🐾", label: "Pet",         type: "expense" },
+  { id: "cat-leisure",   emoji: "🎮", label: "Lazer",       type: "expense" },
+  { id: "cat-subs",      emoji: "📱", label: "Assinatura",  type: "expense" },
+  { id: "cat-education", emoji: "📚", label: "Estudo",      type: "expense" },
+  { id: "cat-tax",       emoji: "📄", label: "Impostos",    type: "expense" },
+  { id: "cat-other",     emoji: "💸", label: "Outros",      type: "expense" },
+  { id: "cat-salary",    emoji: "💼", label: "Salário",     type: "income"  },
+  { id: "cat-freelance", emoji: "💻", label: "Freela",      type: "income"  },
+  { id: "cat-investment",emoji: "📈", label: "Rendimento",  type: "income"  },
+  { id: "cat-sale",      emoji: "🤝", label: "Venda",       type: "income"  },
+  { id: "cat-gift",      emoji: "🎁", label: "Presente",    type: "income"  },
+  { id: "cat-other-in",  emoji: "💰", label: "Outros",      type: "income"  },
+]
+
+function TransactionEditSheet({ transaction, accounts, onClose, onSaved, onDeleted }: {
+  transaction: any
+  accounts: any[]
+  onClose: () => void
+  onSaved: (updated: any) => void
+  onDeleted: (id: string) => void
+}) {
+  const notesParts = transaction.notes?.includes("|") ? transaction.notes.split("|") : null
+  const initEmoji  = notesParts?.[0] ?? (transaction.type === "income" ? "💚" : "💸")
+  const initCatId  = ALL_CATS.find(c => c.emoji === initEmoji && c.type === transaction.type)?.id ?? ""
+
+  const [description, setDescription] = useState<string>(transaction.description ?? "")
+  const [amount, setAmount]           = useState<string>(String(transaction.amount ?? ""))
+  const [date, setDate]               = useState<string>(transaction.date ?? "")
+  const [accountId, setAccountId]     = useState<string>(transaction.account_id ?? "")
+  const [catId, setCatId]             = useState<string>(initCatId)
+  const [isRecurring, setIsRecurring] = useState<boolean>(!!transaction.is_recurring)
+  const [saving, setSaving]           = useState(false)
+  const [confirming, setConfirming]   = useState(false)
+
+  const cats = ALL_CATS.filter(c => c.type === transaction.type)
+  const selectedCat = ALL_CATS.find(c => c.id === catId)
+
+  async function handleSave() {
+    const parsed = parseFloat(String(amount).replace(",", "."))
+    if (!parsed || parsed <= 0) return
+    setSaving(true)
+    const supabase = createClient()
+    const notes = selectedCat ? `${selectedCat.emoji}|${selectedCat.label}` : transaction.notes
+    const { data, error } = await supabase.from("transactions").update({
+      description: description.trim() || transaction.description,
+      amount: parsed,
+      date,
+      account_id: accountId || transaction.account_id,
+      is_recurring: isRecurring,
+      notes,
+    }).eq("id", transaction.id).select().single()
+    setSaving(false)
+    if (!error && data) { onSaved(data); window.dispatchEvent(new CustomEvent("transaction-added")) }
+  }
+
+  async function handleDelete() {
+    setSaving(true)
+    const supabase = createClient()
+    await supabase.from("transactions").delete().eq("id", transaction.id)
+    onDeleted(transaction.id)
+    window.dispatchEvent(new CustomEvent("transaction-added"))
+  }
+
+  const isIncome = transaction.type === "income"
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm p-4"
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
+        transition={{ type: "spring", damping: 28, stiffness: 300 }}
+        className="w-full max-w-lg bg-card rounded-t-3xl shadow-2xl pb-10"
+        style={{ maxHeight: "90dvh", overflowY: "auto" }}
+        onClick={e => e.stopPropagation()}>
+
+        {/* Handle */}
+        <div className="flex justify-center pt-3 pb-1">
+          <div className="w-10 h-1 rounded-full bg-muted-foreground/25" />
+        </div>
+
+        <div className="px-5 pb-4 space-y-4">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">{selectedCat?.emoji ?? initEmoji}</span>
+              <div>
+                <p className="font-black text-base">Editar lançamento</p>
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                  isIncome ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                }`}>{isIncome ? "💚 Entrada" : "🔴 Saída"}</span>
+              </div>
+            </div>
+            <button onClick={onClose} className="p-2 rounded-xl hover:bg-muted">
+              <X className="size-4 text-muted-foreground" />
+            </button>
+          </div>
+
+          {/* Category */}
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground mb-2">Categoria</p>
+            <div className="grid grid-cols-4 gap-2">
+              {cats.map(c => (
+                <button key={c.id} onClick={() => setCatId(c.id)}
+                  className={`flex flex-col items-center gap-1 p-2.5 rounded-2xl border-2 text-xs font-semibold transition-all ${
+                    catId === c.id ? "border-primary bg-primary/8 text-primary" : "border-border/50 bg-muted/30 text-muted-foreground"
+                  }`}>
+                  <span className="text-lg">{c.emoji}</span>
+                  <span className="leading-tight text-center">{c.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Description */}
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground mb-2">Descrição</p>
+            <input value={description} onChange={e => setDescription(e.target.value)}
+              placeholder="Ex: Netflix, almoço, salário..." autoComplete="off"
+              className="w-full h-11 rounded-2xl border px-4 text-sm bg-card focus:outline-none focus:ring-2 focus:ring-primary/40" />
+          </div>
+
+          {/* Amount + Date */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground mb-2">Valor (R$)</p>
+              <input value={amount} onChange={e => setAmount(e.target.value)}
+                inputMode="decimal" placeholder="0,00"
+                className="w-full h-11 rounded-2xl border px-4 text-sm bg-card focus:outline-none focus:ring-2 focus:ring-primary/40" />
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground mb-2">Data</p>
+              <input type="date" value={date} onChange={e => setDate(e.target.value)}
+                className="w-full h-11 rounded-2xl border px-3 text-sm bg-card focus:outline-none focus:ring-2 focus:ring-primary/40" />
+            </div>
+          </div>
+
+          {/* Account */}
+          {accounts.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground mb-2">Conta</p>
+              <div className="flex gap-2 flex-wrap">
+                {accounts.map(a => (
+                  <button key={a.id} onClick={() => setAccountId(a.id)}
+                    className={`flex items-center gap-1.5 px-3 py-2 rounded-2xl text-xs font-semibold border-2 transition-all ${
+                      accountId === a.id ? "border-primary bg-primary/8 text-primary" : "border-border/60 bg-muted/30 text-muted-foreground"
+                    }`}>{a.name}</button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Recurring */}
+          <button onClick={() => setIsRecurring(v => !v)}
+            className={`flex items-center gap-2.5 w-full p-3 rounded-2xl border-2 text-left transition-all ${
+              isRecurring ? "border-primary bg-primary/8" : "border-border/50 bg-muted/20"
+            }`}>
+            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
+              isRecurring ? "border-primary bg-primary" : "border-muted-foreground"
+            }`}>
+              {isRecurring && <Check className="size-3 text-white" />}
+            </div>
+            <p className={`text-xs font-bold ${isRecurring ? "text-primary" : "text-foreground"}`}>
+              🔁 Recorrente — aparece em "Assino todo mês"
+            </p>
+          </button>
+
+          {/* Actions */}
+          {confirming ? (
+            <div className="rounded-2xl bg-red-50 dark:bg-red-950/30 border border-red-200 p-4 space-y-3">
+              <p className="text-sm font-bold text-red-700 dark:text-red-400 text-center">Apagar este lançamento?</p>
+              <p className="text-xs text-muted-foreground text-center">O saldo da conta será ajustado automaticamente.</p>
+              <div className="flex gap-2">
+                <button onClick={() => setConfirming(false)}
+                  className="flex-1 h-10 rounded-2xl border text-sm font-semibold hover:bg-muted">
+                  Cancelar
+                </button>
+                <button onClick={handleDelete} disabled={saving}
+                  className="flex-1 h-10 rounded-2xl bg-red-500 hover:bg-red-600 text-white text-sm font-bold disabled:opacity-50">
+                  {saving ? "Apagando..." : "Apagar"}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => setConfirming(true)}
+                className="flex items-center gap-1.5 px-4 py-3 rounded-2xl border border-red-200 text-red-500 text-sm font-semibold hover:bg-red-50 transition-colors">
+                <Trash2 className="size-3.5" />Apagar
+              </button>
+              <button onClick={handleSave} disabled={saving}
+                className="flex-1 h-12 rounded-2xl text-white font-black text-sm disabled:opacity-50 flex items-center justify-center gap-2"
+                style={{ background: "linear-gradient(135deg,#7c3aed,#6d28d9)" }}>
+                {saving ? "Salvando..." : <><Check className="size-4" />Salvar alterações</>}
+              </button>
+            </div>
+          )}
+        </div>
+      </motion.div>
+    </motion.div>
+  )
+}
+
 // ─── main page ────────────────────────────────────────────────────────────────
 export default function TransactionsPage() {
   const [search, setSearch]         = useState("")
@@ -347,6 +556,7 @@ export default function TransactionsPage() {
   const [allAccounts, setAllAccounts]         = useState<Account[]>([])
   const [allCards, setAllCards]               = useState<CreditCard[]>([])
   const [loading, setLoading]                 = useState(true)
+  const [editingTx, setEditingTx]             = useState<Transaction | null>(null)
 
   const fetchData = () => {
     const supabase = createClient()
@@ -656,12 +866,12 @@ export default function TransactionsPage() {
               <motion.div key={t.id}
                 initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 8 }}
                 transition={{ delay: i * 0.03 }}
-                className="rounded-2xl border bg-card p-4 flex items-center gap-3"
+                className="rounded-2xl border bg-card p-4 flex items-center gap-3 cursor-pointer hover:border-primary/40 hover:bg-primary/[0.02] transition-colors active:scale-[0.99]"
+                onClick={() => setEditingTx(t as any)}
               >
                 <div className="w-11 h-11 rounded-2xl flex items-center justify-center text-xl shrink-0"
                      style={{ backgroundColor: iconBg }}>{catEmoji}</div>
                 <div className="flex-1 min-w-0">
-                  {/* Category name as title, description as subtitle */}
                   {catLabel ? (
                     <>
                       <p className="text-sm font-semibold truncate">{catLabel}</p>
@@ -678,13 +888,16 @@ export default function TransactionsPage() {
                     {t.is_recurring && <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">🔁 fixo</span>}
                   </div>
                 </div>
-                <div className="text-right shrink-0">
-                  <p className={`text-sm font-bold ${isIncome ? "text-green-600 dark:text-green-400" : card ? "text-purple-600 dark:text-purple-400" : "text-foreground"}`}>
-                    {isIncome ? "+" : "-"}{formatCurrency(t.amount)}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {card ? "fatura" : acc ? acc.name.split(" ")[0] : ""}
-                  </p>
+                <div className="flex items-center gap-2">
+                  <div className="text-right shrink-0">
+                    <p className={`text-sm font-bold ${isIncome ? "text-green-600 dark:text-green-400" : card ? "text-purple-600 dark:text-purple-400" : "text-foreground"}`}>
+                      {isIncome ? "+" : "-"}{formatCurrency(t.amount)}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {card ? "fatura" : acc ? acc.name.split(" ")[0] : ""}
+                    </p>
+                  </div>
+                  <Pencil className="size-3.5 text-muted-foreground/50 shrink-0" />
                 </div>
               </motion.div>
             )
@@ -697,6 +910,25 @@ export default function TransactionsPage() {
           </div>
         )}
       </div>
+
+      {/* Edit sheet */}
+      <AnimatePresence>
+        {editingTx && (
+          <TransactionEditSheet
+            transaction={editingTx}
+            accounts={allAccounts}
+            onClose={() => setEditingTx(null)}
+            onSaved={updated => {
+              setAllTransactions(prev => prev.map(t => t.id === updated.id ? updated : t))
+              setEditingTx(null)
+            }}
+            onDeleted={id => {
+              setAllTransactions(prev => prev.filter(t => t.id !== id))
+              setEditingTx(null)
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }

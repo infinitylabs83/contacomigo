@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { X, Check, ChevronDown, ChevronUp } from "lucide-react"
 import { Input } from "@/components/ui/input"
-import { DEMO_CARDS } from "@/lib/demo-data"
+import { createClient } from "@/lib/supabase/client"
 
 const EXPENSE_CATS = [
   { id: "cat-food",      emoji: "🍔", label: "Comida",      hint: "iFood, restaurante, lanche, padaria",             color: "#F97316" },
@@ -33,17 +33,13 @@ const INCOME_CATS = [
   { id: "cat-other-in",      emoji: "💰", label: "Outros",     hint: "toque aqui e descreva o que foi",           color: "#9CA3AF" },
 ]
 
-const ACCOUNTS = [
-  { id: "acc-nubank",  emoji: "🟣", label: "Nubank" },
-  { id: "acc-itau",    emoji: "🟠", label: "Itaú" },
-  { id: "acc-wallet",  emoji: "👛", label: "Carteira" },
-  { id: "acc-other",   emoji: "🏦", label: "Outro" },
-]
-
 type Mode      = "expense" | "income"
 type Step      = "type" | "category" | "describe" | "amount"
 type PayMethod = "cash" | "credit"
 type Cat       = typeof EXPENSE_CATS[0]
+
+interface RealAccount { id: string; name: string; icon: string; color: string }
+interface RealCard    { id: string; name: string }
 
 export function QuickAdd() {
   const [open, setOpen]               = useState(false)
@@ -52,20 +48,46 @@ export function QuickAdd() {
   const [selectedCat, setSelectedCat] = useState<Cat | null>(null)
   const [amount, setAmount]           = useState("")
   const [description, setDescription] = useState("")
-  const [account, setAccount]         = useState("")
+  const [accountId, setAccountId]     = useState("")
   const [showDetails, setShowDetails] = useState(false)
   const [done, setDone]               = useState(false)
   const [payMethod, setPayMethod]     = useState<PayMethod>("cash")
-  const [creditCardId, setCreditCardId] = useState(DEMO_CARDS[0]?.id ?? "")
+  const [creditCardId, setCreditCardId] = useState("")
   const [installments, setInstallments] = useState(1)
+  const [saving, setSaving]           = useState(false)
+  const [accounts, setAccounts]       = useState<RealAccount[]>([])
+  const [cards, setCards]             = useState<RealCard[]>([])
   const mounted = useRef(true)
-  useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
+
+  useEffect(() => {
+    mounted.current = true
+    return () => { mounted.current = false }
+  }, [])
+
+  // Load accounts and cards when component mounts
+  useEffect(() => {
+    const supabase = createClient()
+    Promise.all([
+      supabase.from("accounts").select("id, name, icon, color").eq("is_active", true).order("created_at"),
+      supabase.from("credit_cards").select("id, name").eq("is_active", true).order("created_at"),
+    ]).then(([accRes, cardRes]) => {
+      if (!mounted.current) return
+      const accs = accRes.data ?? []
+      const cds  = cardRes.data ?? []
+      setAccounts(accs)
+      setCards(cds)
+      if (accs.length > 0) setAccountId(accs[0].id)
+      if (cds.length > 0) setCreditCardId(cds[0].id)
+    })
+  }, [])
 
   const reset = () => {
     setStep("type"); setMode("expense"); setSelectedCat(null)
-    setAmount(""); setDescription(""); setAccount("")
-    setShowDetails(false); setDone(false)
+    setAmount(""); setDescription(""); setShowDetails(false)
+    setDone(false); setSaving(false)
     setPayMethod("cash"); setInstallments(1)
+    if (accounts.length > 0) setAccountId(accounts[0].id)
+    if (cards.length > 0) setCreditCardId(cards[0].id)
   }
 
   const handleClose = () => {
@@ -77,12 +99,11 @@ export function QuickAdd() {
     const handler = () => { reset(); setOpen(true) }
     window.addEventListener("quick-add-open", handler)
     return () => window.removeEventListener("quick-add-open", handler)
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [accounts, cards]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleCategory = (cat: Cat) => {
     setSelectedCat(cat)
     setDescription("")
-    // "Outros" → pede descrição primeiro
     if (cat.id === "cat-other" || cat.id === "cat-other-in") {
       setStep("describe")
     } else {
@@ -90,10 +111,48 @@ export function QuickAdd() {
     }
   }
 
-  const handleConfirm = () => {
-    if (!amount || parseFloat(amount.replace(",", ".")) <= 0) return
-    setDone(true)
-    setTimeout(handleClose, 1600)
+  const handleConfirm = async () => {
+    const parsed = parseFloat(amount.replace(",", "."))
+    if (!parsed || parsed <= 0) return
+
+    setSaving(true)
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const today = new Date().toISOString().split("T")[0]
+      const label = description.trim() || selectedCat?.label || (mode === "expense" ? "Gasto" : "Receita")
+
+      const transaction: Record<string, unknown> = {
+        user_id:        user.id,
+        type:           mode,
+        description:    label,
+        amount:         parsed,
+        date:           today,
+        account_id:     accountId || null,
+        status:         "confirmed",
+        is_installment: payMethod === "credit" && installments > 1,
+        installment_total: payMethod === "credit" ? installments : null,
+        installment_current: payMethod === "credit" ? 1 : null,
+        is_recurring:   false,
+        tags:           [],
+        notes:          null,
+      }
+
+      if (payMethod === "credit" && creditCardId) {
+        transaction.card_id = creditCardId
+      }
+
+      await supabase.from("transactions").insert(transaction)
+
+      if (mounted.current) {
+        setDone(true)
+        setTimeout(handleClose, 1600)
+      }
+    } catch {
+      setSaving(false)
+    }
   }
 
   const cats = mode === "expense" ? EXPENSE_CATS : INCOME_CATS
@@ -131,7 +190,7 @@ export function QuickAdd() {
                     <Check className="size-10 text-white" />
                   </motion.div>
                   <p className="text-xl font-black">{mode === "income" ? "Anotado! 🎉" : payMethod === "credit" ? "Na fatura! 💳" : "Registrado! 👊"}</p>
-                  <div className="flex items-center gap-1.5 bg-amber-50 dark:bg-amber-950/30 px-4 py-2 rounded-full">
+                  <div className="flex items-center gap-1.5 bg-amber-50 px-4 py-2 rounded-full">
                     <span className="text-amber-500 font-black">+{pts} pontos</span>
                     <span className="text-amber-400">ganhos agora</span>
                     <span>⭐</span>
@@ -153,19 +212,21 @@ export function QuickAdd() {
                   <div className="grid grid-cols-2 gap-4">
                     <motion.button whileTap={{ scale: 0.96 }}
                       onClick={() => { setMode("expense"); setStep("category") }}
-                      className="flex flex-col items-center gap-3 p-6 rounded-3xl border-2 border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30">
+                      className="flex flex-col items-center gap-3 p-6 rounded-3xl border-2"
+                      style={{ borderColor: "#fca5a5", background: "#fef2f2" }}>
                       <span className="text-5xl">🔴</span>
                       <div className="text-center">
-                        <p className="font-black text-lg text-red-600 dark:text-red-400">Gastei</p>
+                        <p className="font-black text-lg" style={{ color: "#dc2626" }}>Gastei</p>
                         <p className="text-xs text-muted-foreground">saiu dinheiro</p>
                       </div>
                     </motion.button>
                     <motion.button whileTap={{ scale: 0.96 }}
                       onClick={() => { setMode("income"); setStep("category") }}
-                      className="flex flex-col items-center gap-3 p-6 rounded-3xl border-2 border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/30">
+                      className="flex flex-col items-center gap-3 p-6 rounded-3xl border-2"
+                      style={{ borderColor: "#86efac", background: "#f0fdf4" }}>
                       <span className="text-5xl">💚</span>
                       <div className="text-center">
-                        <p className="font-black text-lg text-green-600 dark:text-green-400">Recebi</p>
+                        <p className="font-black text-lg" style={{ color: "#16a34a" }}>Recebi</p>
                         <p className="text-xs text-muted-foreground">entrou dinheiro</p>
                       </div>
                     </motion.button>
@@ -177,7 +238,8 @@ export function QuickAdd() {
                 <>
                   <div className="flex items-center justify-between mb-5">
                     <div>
-                      <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${mode === "expense" ? "bg-red-100 text-red-600 dark:bg-red-950/40 dark:text-red-400" : "bg-green-100 text-green-600 dark:bg-green-950/40 dark:text-green-400"}`}>
+                      <span className="text-xs font-bold px-2.5 py-0.5 rounded-full"
+                        style={{ background: mode === "expense" ? "#fef2f2" : "#f0fdf4", color: mode === "expense" ? "#dc2626" : "#16a34a" }}>
                         {mode === "expense" ? "🔴 Gastei" : "💚 Recebi"}
                       </span>
                       <h3 className="text-lg font-black mt-1">Com o quê?</h3>
@@ -186,7 +248,6 @@ export function QuickAdd() {
                       <X className="size-4" />
                     </button>
                   </div>
-
                   <div className="grid grid-cols-3 gap-2.5">
                     {cats.map((cat) => (
                       <motion.button key={cat.id} whileTap={{ scale: 0.92 }}
@@ -196,43 +257,34 @@ export function QuickAdd() {
                       >
                         <span className="text-2xl">{cat.emoji}</span>
                         <span className="text-xs font-bold text-center leading-tight w-full">{cat.label}</span>
-                        <span className="text-[9px] text-muted-foreground text-center leading-tight line-clamp-2 w-full">
-                          {cat.hint}
-                        </span>
+                        <span className="text-[9px] text-muted-foreground text-center leading-tight line-clamp-2 w-full">{cat.hint}</span>
                       </motion.button>
                     ))}
                   </div>
                 </>
 
-              /* ── STEP: DESCRIBE (Outros) ── */
+              /* ── STEP: DESCRIBE ── */
               ) : step === "describe" ? (
                 <>
                   <div className="flex items-center justify-between mb-5">
-                    <button onClick={() => setStep("category")}
-                      className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+                    <button onClick={() => setStep("category")} className="flex items-center gap-2 text-sm text-muted-foreground">
                       ← {selectedCat?.emoji} {selectedCat?.label}
                     </button>
                     <button onClick={handleClose} className="w-9 h-9 rounded-full bg-muted flex items-center justify-center">
                       <X className="size-4" />
                     </button>
                   </div>
-
                   <div className="space-y-4">
                     <div>
                       <p className="text-lg font-black mb-1">O que foi isso?</p>
-                      <p className="text-sm text-muted-foreground mb-4">
-                        Uma palavra já basta — vai aparecer no histórico e nos relatórios.
-                      </p>
-                      <Input
-                        autoFocus
-                        placeholder={mode === "expense" ? "ex: flanelinha, gorjeta, banca de jornal..." : "ex: vaquinha, presente recebido..."}
-                        value={description}
-                        onChange={e => setDescription(e.target.value)}
+                      <p className="text-sm text-muted-foreground mb-4">Uma palavra já basta.</p>
+                      <Input autoFocus
+                        placeholder={mode === "expense" ? "ex: flanelinha, gorjeta..." : "ex: vaquinha, presente recebido..."}
+                        value={description} onChange={e => setDescription(e.target.value)}
                         onKeyDown={e => { if (e.key === "Enter" && description.trim()) setStep("amount") }}
                         className="rounded-2xl text-base h-12 border-2 focus-visible:border-primary"
                       />
                     </div>
-
                     <motion.button whileTap={{ scale: 0.97 }}
                       onClick={() => { if (description.trim()) setStep("amount") }}
                       disabled={!description.trim()}
@@ -249,7 +301,7 @@ export function QuickAdd() {
                 <>
                   <div className="flex items-center justify-between mb-5">
                     <button onClick={() => setStep(selectedCat?.id === "cat-other" || selectedCat?.id === "cat-other-in" ? "describe" : "category")}
-                      className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+                      className="flex items-center gap-2 text-sm text-muted-foreground">
                       ← {selectedCat?.emoji} {selectedCat?.id === "cat-other" || selectedCat?.id === "cat-other-in" ? description : selectedCat?.label}
                     </button>
                     <button onClick={handleClose} className="w-9 h-9 rounded-full bg-muted flex items-center justify-center">
@@ -274,31 +326,25 @@ export function QuickAdd() {
                     <div className="mb-4">
                       <p className="text-xs font-semibold text-muted-foreground mb-2">Como vai pagar?</p>
                       <div className="grid grid-cols-2 gap-2">
-                        {([
-                          { id: "cash"   as PayMethod, icon: "💸", label: "À vista",    sub: "débito, PIX ou dinheiro" },
-                          { id: "credit" as PayMethod, icon: "💳", label: "No crédito", sub: "vai pra fatura" },
-                        ]).map(opt => (
-                          <button key={opt.id} onClick={() => setPayMethod(opt.id)}
+                        {(["cash", "credit"] as PayMethod[]).map(opt => (
+                          <button key={opt} onClick={() => setPayMethod(opt)}
                             className={`flex flex-col items-start gap-0.5 p-3 rounded-2xl border-2 text-left transition-all ${
-                              payMethod === opt.id
-                                ? "border-primary bg-primary/8 text-primary"
-                                : "border-border/60 bg-muted/30 text-muted-foreground"
+                              payMethod === opt ? "border-primary bg-primary/8 text-primary" : "border-border/60 bg-muted/30 text-muted-foreground"
                             }`}>
-                            <span className="text-base leading-none mb-0.5">{opt.icon}</span>
-                            <p className="text-xs font-bold">{opt.label}</p>
-                            <p className="text-[10px] opacity-70 leading-tight">{opt.sub}</p>
+                            <span className="text-base leading-none mb-0.5">{opt === "cash" ? "💸" : "💳"}</span>
+                            <p className="text-xs font-bold">{opt === "cash" ? "À vista" : "No crédito"}</p>
+                            <p className="text-[10px] opacity-70 leading-tight">{opt === "cash" ? "débito, PIX ou dinheiro" : "vai pra fatura"}</p>
                           </button>
                         ))}
                       </div>
-                      {payMethod === "credit" && (
+
+                      {payMethod === "credit" && cards.length > 0 && (
                         <div className="mt-2 space-y-2">
-                          <div className="flex gap-2">
-                            {DEMO_CARDS.map(card => (
+                          <div className="flex gap-2 flex-wrap">
+                            {cards.map(card => (
                               <button key={card.id} onClick={() => setCreditCardId(card.id)}
                                 className={`flex-1 py-2 px-3 rounded-xl border-2 text-xs font-semibold transition-all ${
-                                  creditCardId === card.id
-                                    ? "border-primary bg-primary/8 text-primary"
-                                    : "border-border/60 bg-muted/30 text-muted-foreground"
+                                  creditCardId === card.id ? "border-primary bg-primary/8 text-primary" : "border-border/60 bg-muted/30 text-muted-foreground"
                                 }`}>{card.name}</button>
                             ))}
                           </div>
@@ -308,9 +354,7 @@ export function QuickAdd() {
                               {[1,2,3,6,12].map(n => (
                                 <button key={n} onClick={() => setInstallments(n)}
                                   className={`w-9 h-8 rounded-xl border-2 text-xs font-bold transition-all ${
-                                    installments === n
-                                      ? "border-primary bg-primary/8 text-primary"
-                                      : "border-border/60 bg-muted/30 text-muted-foreground"
+                                    installments === n ? "border-primary bg-primary/8 text-primary" : "border-border/60 bg-muted/30 text-muted-foreground"
                                   }`}>{n === 1 ? "1x" : `${n}x`}</button>
                               ))}
                             </div>
@@ -331,47 +375,45 @@ export function QuickAdd() {
                     {showDetails && (
                       <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}
                         className="overflow-hidden mb-4 space-y-3">
-                        {/* Description — only show if not "Outros" (already filled) */}
                         {selectedCat?.id !== "cat-other" && selectedCat?.id !== "cat-other-in" && (
                           <div>
                             <p className="text-xs font-semibold text-muted-foreground mb-1.5">
                               {mode === "expense" ? "O que foi isso?" : "De onde veio?"}
                             </p>
-                            <Input
-                              placeholder={mode === "expense" ? "ex: almoço com a família..." : "ex: pagamento do cliente X..."}
+                            <Input placeholder={mode === "expense" ? "ex: almoço com a família..." : "ex: pagamento do cliente X..."}
                               value={description} onChange={e => setDescription(e.target.value)}
-                              className="rounded-xl text-sm"
-                            />
+                              className="rounded-xl text-sm" />
                           </div>
                         )}
-                        <div>
-                          <p className="text-xs font-semibold text-muted-foreground mb-1.5">
-                            {mode === "expense" ? "Saiu de qual conta?" : "Entrou em qual conta?"}
-                          </p>
-                          <div className="flex gap-2 flex-wrap">
-                            {ACCOUNTS.map(acc => (
-                              <button key={acc.id} onClick={() => setAccount(account === acc.id ? "" : acc.id)}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
-                                  account === acc.id
-                                    ? "border-primary bg-primary/10 text-primary"
-                                    : "border-border bg-muted/50 text-muted-foreground"
-                                }`}>
-                                <span>{acc.emoji}</span>{acc.label}
-                              </button>
-                            ))}
+                        {accounts.length > 0 && (
+                          <div>
+                            <p className="text-xs font-semibold text-muted-foreground mb-1.5">
+                              {mode === "expense" ? "Saiu de qual conta?" : "Entrou em qual conta?"}
+                            </p>
+                            <div className="flex gap-2 flex-wrap">
+                              {accounts.map(acc => (
+                                <button key={acc.id} onClick={() => setAccountId(accountId === acc.id ? "" : acc.id)}
+                                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                                    accountId === acc.id ? "border-primary bg-primary/10 text-primary" : "border-border bg-muted/50 text-muted-foreground"
+                                  }`}>
+                                  {acc.name}
+                                </button>
+                              ))}
+                            </div>
                           </div>
-                        </div>
+                        )}
                       </motion.div>
                     )}
                   </AnimatePresence>
 
-                  <motion.button whileTap={{ scale: 0.97 }} onClick={handleConfirm} disabled={!amount}
+                  <motion.button whileTap={{ scale: 0.97 }} onClick={handleConfirm}
+                    disabled={!amount || saving}
                     className="w-full h-14 rounded-2xl text-white font-black text-base disabled:opacity-40 flex items-center justify-center gap-2"
                     style={{ background: mode === "expense" ? "linear-gradient(135deg,#7c3aed,#6d28d9)" : "linear-gradient(135deg,#059669,#047857)" }}>
-                    {mode === "expense"
+                    {saving ? "Salvando..." : mode === "expense"
                       ? payMethod === "credit" ? "✓ Lançar no crédito 💳" : "✓ Registrar gasto"
                       : "✓ Anotar entrada"}
-                    <span className="text-xs opacity-70 font-normal">+{pts}pts</span>
+                    {!saving && <span className="text-xs opacity-70 font-normal">+{pts}pts</span>}
                   </motion.button>
                 </>
               )}

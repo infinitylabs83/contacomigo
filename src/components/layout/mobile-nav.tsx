@@ -3,16 +3,16 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { motion } from "framer-motion"
-import { Home, Wallet, Building2, Target } from "lucide-react"
+import { Home, Wallet, Building2, User } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const LEFT_NAV = [
-  { href: "/dashboard",    label: "Início",        icon: Home      },
-  { href: "/transactions", label: "Moviment.",     icon: Wallet    },
+  { href: "/dashboard",    label: "Início",    icon: Home      },
+  { href: "/transactions", label: "Moviment.", icon: Wallet    },
 ]
 const RIGHT_NAV = [
-  { href: "/accounts",     label: "Contas",        icon: Building2 },
-  { href: "/plan",         label: "Planejar",      icon: Target    },
+  { href: "/accounts",     label: "Contas",    icon: Building2 },
+  { href: "/profile",      label: "Perfil",    icon: User      },
 ]
 
 export function MobileNav() {
@@ -42,7 +42,7 @@ export function MobileNav() {
           )
         })}
 
-        {/* Center: LANÇAR — dispatches event */}
+        {/* Center: LANÇAR */}
         <li className="flex-1 flex justify-center">
           <button onClick={openLancar} className="flex flex-col items-center -mt-5">
             <motion.div

@@ -16,7 +16,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         {children}
       </main>
       <footer className="p-6 text-center text-xs text-muted-foreground">
-        © 2025 Conta Comigo · <Link href="/privacy" className="hover:underline">Privacidade</Link>
+        © {new Date().getFullYear()} Conta Comigo · <Link href="/privacy" className="hover:underline">Privacidade</Link>
       </footer>
     </div>
   )

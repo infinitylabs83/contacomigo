@@ -399,7 +399,17 @@ function TransactionEditSheet({ transaction, accounts, onClose, onSaved, onDelet
   async function handleDelete() {
     setSaving(true)
     const supabase = createClient()
-    await supabase.from("transactions").delete().eq("id", transaction.id)
+    const { error } = await supabase
+      .from("transactions")
+      .delete()
+      .eq("id", transaction.id)
+      .eq("user_id", transaction.user_id)
+    setSaving(false)
+    if (error) {
+      alert(`Erro ao apagar: ${error.message}`)
+      setConfirming(false)
+      return
+    }
     onDeleted(transaction.id)
     window.dispatchEvent(new CustomEvent("transaction-added"))
   }

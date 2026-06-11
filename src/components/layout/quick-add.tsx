@@ -118,8 +118,12 @@ export function QuickAdd() {
 
   const handleConfirm = async () => {
     const parsed = parseFloat(amount.replace(",", "."))
-    if (!parsed || parsed <= 0) return
+    if (!parsed || parsed <= 0) {
+      setSaveError(`Valor inválido: "${amount}" — digite apenas números (ex: 45 ou 45.90)`)
+      return
+    }
 
+    setSaveError("")
     setSaving(true)
     try {
       const supabase = createClient()

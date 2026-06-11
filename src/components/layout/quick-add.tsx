@@ -55,6 +55,7 @@ export function QuickAdd() {
   const [creditCardId, setCreditCardId] = useState("")
   const [installments, setInstallments] = useState(1)
   const [isRecurring, setIsRecurring]  = useState(false)
+  const [saveError, setSaveError]     = useState("")
   const [saving, setSaving]           = useState(false)
   const [accounts, setAccounts]       = useState<RealAccount[]>([])
   const [cards, setCards]             = useState<RealCard[]>([])
@@ -85,7 +86,7 @@ export function QuickAdd() {
   const reset = () => {
     setStep("type"); setMode("expense"); setSelectedCat(null)
     setAmount(""); setDescription(""); setShowDetails(false)
-    setDone(false); setSaving(false); setIsRecurring(false)
+    setDone(false); setSaving(false); setIsRecurring(false); setSaveError("")
     setPayMethod("cash"); setInstallments(1)
     if (accounts.length > 0) setAccountId(accounts[0].id)
     if (cards.length > 0) setCreditCardId(cards[0].id)
@@ -165,7 +166,7 @@ export function QuickAdd() {
       const { error } = await supabase.from("transactions").insert(transaction)
 
       if (error) {
-        console.error("Erro ao salvar transação:", error.message, error.details)
+        setSaveError(`Erro: ${error.message || error.details || "falha ao salvar"}`)
         setSaving(false)
         return
       }
@@ -443,6 +444,12 @@ export function QuickAdd() {
                       </motion.div>
                     )}
                   </AnimatePresence>
+
+                  {saveError && (
+                    <div className="rounded-2xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-600 font-medium">
+                      ⚠️ {saveError}
+                    </div>
+                  )}
 
                   <motion.button whileTap={{ scale: 0.97 }} onClick={handleConfirm}
                     disabled={!amount || saving}

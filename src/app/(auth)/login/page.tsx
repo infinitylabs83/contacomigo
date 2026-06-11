@@ -4,19 +4,34 @@ import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Eye, EyeOff, Loader2, ArrowRight } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { createClient } from "@/lib/supabase/client"
+
+const C = {
+  bg:      "#faf9f7",
+  white:   "#ffffff",
+  text:    "#111827",
+  muted:   "#6b7280",
+  border:  "#e5e7eb",
+  primary: "#7c3aed",
+}
+
+const inputStyle: React.CSSProperties = {
+  width: "100%", height: 52, padding: "0 16px", borderRadius: 14, fontSize: 16,
+  border: `2px solid ${C.border}`, background: C.white, color: C.text,
+  outline: "none", boxSizing: "border-box",
+}
+
+const labelStyle: React.CSSProperties = {
+  display: "block", fontSize: 14, fontWeight: 600, marginBottom: 6, color: C.text,
+}
 
 export default function LoginPage() {
   const router = useRouter()
-  const [email, setEmail] = useState("")
+  const [email, setEmail]       = useState("")
   const [password, setPassword] = useState("")
-  const [showPassword, setShowPassword] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState("")
+  const [showPw, setShowPw]     = useState(false)
+  const [loading, setLoading]   = useState(false)
+  const [error, setError]       = useState("")
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -28,72 +43,82 @@ export default function LoginPage() {
       if (error) throw error
       router.push("/dashboard")
       router.refresh()
-    } catch (err: unknown) {
+    } catch {
       setError("E-mail ou senha incorretos. Tente novamente.")
     } finally {
       setLoading(false)
     }
   }
 
-  const handleDemo = () => {
-    document.cookie = "demo_mode=true; path=/; max-age=86400"
-    router.push("/dashboard")
-  }
-
   return (
-    <Card className="w-full max-w-md shadow-xl border-border/50">
-      <CardHeader className="space-y-1">
-        <CardTitle className="text-2xl">Bem-vindo de volta</CardTitle>
-        <CardDescription>Entre na sua conta para continuar</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleLogin} className="space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="email">E-mail</Label>
-            <Input
+    <div className="w-full max-w-md px-4">
+      {/* Card */}
+      <div className="rounded-3xl p-8 shadow-xl" style={{ background: C.white, border: `1px solid ${C.border}` }}>
+        <div className="mb-6">
+          <h1 className="text-2xl font-black mb-1" style={{ color: C.text }}>Bem-vindo de volta 👋</h1>
+          <p className="text-sm" style={{ color: C.muted }}>Entre na sua conta para continuar</p>
+        </div>
+
+        <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div>
+            <label htmlFor="email" style={labelStyle}>E-mail</label>
+            <input
               id="email" type="email" placeholder="seu@email.com"
-              value={email} onChange={(e) => setEmail(e.target.value)}
-              required autoComplete="email"
+              value={email} onChange={e => setEmail(e.target.value)}
+              required autoComplete="email" inputMode="email"
+              style={inputStyle}
             />
           </div>
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="password">Senha</Label>
-              <Link href="/forgot-password" className="text-xs text-primary hover:underline">
+
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label htmlFor="password" style={labelStyle}>Senha</label>
+              <Link href="/forgot-password" style={{ fontSize: 12, color: C.primary, textDecoration: "none" }}>
                 Esqueceu a senha?
               </Link>
             </div>
-            <div className="relative">
-              <Input
-                id="password" type={showPassword ? "text" : "password"} placeholder="••••••••"
-                value={password} onChange={(e) => setPassword(e.target.value)}
+            <div style={{ position: "relative" }}>
+              <input
+                id="password" type={showPw ? "text" : "password"}
+                placeholder="••••••••"
+                value={password} onChange={e => setPassword(e.target.value)}
                 required autoComplete="current-password"
+                style={{ ...inputStyle, paddingRight: 48 }}
               />
-              <Button
-                type="button" variant="ghost" size="icon-sm"
-                className="absolute right-1 top-1/2 -translate-y-1/2"
-                onClick={() => setShowPassword(!showPassword)}
-              >
-                {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-              </Button>
+              <button type="button" onClick={() => setShowPw(!showPw)}
+                style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)",
+                  background: "none", border: "none", cursor: "pointer", color: C.muted, display: "flex" }}>
+                {showPw ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
             </div>
           </div>
 
           {error && (
-            <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2">{error}</p>
+            <p style={{ fontSize: 13, color: "#dc2626", background: "#fef2f2", borderRadius: 10, padding: "10px 14px", margin: 0 }}>
+              {error}
+            </p>
           )}
 
-          <Button type="submit" className="w-full gap-2" disabled={loading}>
-            {loading ? <Loader2 className="size-4 animate-spin" /> : <ArrowRight className="size-4" />}
+          <button type="submit" disabled={loading}
+            className="flex items-center justify-center gap-2"
+            style={{
+              height: 52, borderRadius: 14, border: "none", cursor: loading ? "not-allowed" : "pointer",
+              background: `linear-gradient(135deg,${C.primary},#6d28d9)`,
+              color: "#fff", fontWeight: 700, fontSize: 16, opacity: loading ? 0.7 : 1,
+              marginTop: 4,
+            }}>
+            {loading ? <Loader2 size={18} className="animate-spin" /> : <ArrowRight size={18} />}
             Entrar
-          </Button>
+          </button>
         </form>
 
-        <p className="text-center text-sm text-muted-foreground mt-4">
+        <p className="text-center mt-5" style={{ fontSize: 14, color: C.muted }}>
           Não tem conta?{" "}
-          <Link href="/register" className="text-primary font-medium hover:underline">Criar conta grátis</Link>
+          <Link href="/register" className="font-semibold" style={{ color: C.primary }}>
+            Criar conta grátis
+          </Link>
         </p>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   )
 }

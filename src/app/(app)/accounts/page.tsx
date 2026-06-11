@@ -498,9 +498,12 @@ function DebtSheet({ debt, userId, onClose, onSave }: {
   const [current, setCurrent]     = useState(debt ? String(debt.current_balance) : "")
   const [monthly, setMonthly]     = useState(debt ? String(debt.monthly_payment) : "")
   const [interest, setInterest]   = useState(debt ? String(debt.interest_rate ?? "") : "")
+  const [saving, setSaving]       = useState(false)
+  const [saveError, setSaveError] = useState("")
 
   async function handleSave() {
-    if (!name.trim() || !original) return
+    if (!name.trim() || !original) { setSaveError("Preencha nome e valor original."); return }
+    setSaving(true); setSaveError("")
     const supabase = createClient()
     const payload = {
       user_id: userId, name: name.trim(), type, creditor: creditor.trim(),
@@ -510,12 +513,15 @@ function DebtSheet({ debt, userId, onClose, onSave }: {
       interest_rate: parseFloat((interest || "0").replace(",", ".")),
     }
     if (debt) {
-      const { data } = await supabase.from("debts").update(payload).eq("id", debt.id).select().single()
-      if (data) onSave(data)
+      const { data, error } = await supabase.from("debts").update(payload).eq("id", debt.id).select().single()
+      if (error) { setSaveError(`Erro: ${error.message}`); setSaving(false); return }
+      if (data) { onSave(data); onClose() }
     } else {
-      const { data } = await supabase.from("debts").insert(payload).select().single()
-      if (data) onSave(data)
+      const { data, error } = await supabase.from("debts").insert(payload).select().single()
+      if (error) { setSaveError(`Erro: ${error.message}`); setSaving(false); return }
+      if (data) { onSave(data); onClose() }
     }
+    setSaving(false)
   }
 
   return (
@@ -577,10 +583,11 @@ function DebtSheet({ debt, userId, onClose, onSave }: {
             <Input value={interest} onChange={e => setInterest(e.target.value)} inputMode="decimal" placeholder="Ex: 2.5" className="rounded-2xl" />
           </div>
         </div>
-        <button onClick={handleSave}
-          className="w-full h-11 rounded-2xl text-white font-black text-sm"
+        {saveError && <p className="text-xs text-destructive bg-destructive/10 rounded-xl px-3 py-2">{saveError}</p>}
+        <button onClick={handleSave} disabled={saving}
+          className="w-full h-11 rounded-2xl text-white font-black text-sm disabled:opacity-60"
           style={{ background: "linear-gradient(135deg,#7c3aed,#6d28d9)" }}>
-          {debt ? "Salvar alterações" : "Adicionar dívida"}
+          {saving ? "Salvando..." : debt ? "Salvar alterações" : "Adicionar dívida"}
         </button>
       </motion.div>
     </motion.div>

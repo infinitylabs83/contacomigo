@@ -812,12 +812,14 @@ function TabAssino({ userId }: { userId: string }) {
 
   async function loadSubs() {
     const supabase = createClient()
-    // Busca transações recorrentes (lançadas via Lançar → Assinatura)
+
+    // Busca transações da categoria Assinatura (notes começa com "📱|")
+    // OU marcadas como is_recurring — dupla garantia
     const { data: txns } = await supabase
       .from("transactions")
-      .select("id,description,amount,notes,date")
-      .eq("is_recurring", true)
+      .select("id,description,amount,notes,date,is_recurring")
       .eq("type", "expense")
+      .or("notes.like.📱|%,is_recurring.eq.true")
       .order("date", { ascending: false })
 
     // Busca assinaturas manuais (adicionadas pelo formulário)
@@ -826,12 +828,11 @@ function TabAssino({ userId }: { userId: string }) {
       .select("*")
       .order("created_at", { ascending: false })
 
-    // Agrupa transações recorrentes por nome (pega o mais recente de cada)
+    // Agrupa por nome (mais recente de cada serviço)
     const txnByName = new Map<string, any>()
     for (const t of txns ?? []) {
       const key = t.description?.toLowerCase() ?? ""
       if (!txnByName.has(key)) {
-        const parts = t.notes?.includes("|") ? t.notes.split("|") : null
         txnByName.set(key, {
           id: `txn-${t.id}`,
           name: t.description,
@@ -839,13 +840,13 @@ function TabAssino({ userId }: { userId: string }) {
           billing_cycle: "monthly",
           billing_day: null,
           _fromTxn: true,
-          _emoji: parts?.[0] ?? "📱",
+          _emoji: "📱",
         })
       }
     }
 
-    // Combina: manuais + recorrentes que não se repetem
-    const manualNames = new Set((manualSubs ?? []).map(s => s.name?.toLowerCase()))
+    // Combina: manuais primeiro, depois transações sem duplicata
+    const manualNames = new Set((manualSubs ?? []).map((s: any) => s.name?.toLowerCase()))
     const txnItems = [...txnByName.values()].filter(t => !manualNames.has(t.name?.toLowerCase()))
 
     setSubs([...(manualSubs ?? []), ...txnItems])

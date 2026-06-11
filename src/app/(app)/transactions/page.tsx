@@ -142,44 +142,64 @@ const BUDGET_CATS = [
   { id: "pet",       emoji: "🐾", label: "Pet" },
   { id: "other",     emoji: "💸", label: "Outros" },
 ]
-const STORAGE_KEY = "nexo_budget_limits"
-
 // ─── Expectativa x Realidade ──────────────────────────────────────────────────
 function BudgetVsReal({ transactions }: { transactions: any[] }) {
-  const [limits, setLimits]   = useState<Record<string, number>>({})
+  const [dbRows, setDbRows]   = useState<any[]>([])
   const [showAdd, setShowAdd] = useState(false)
   const [newCat, setNewCat]   = useState(BUDGET_CATS[0].id)
   const [newAmt, setNewAmt]   = useState("")
+  const [saving, setSaving]   = useState(false)
 
-  // Load limits from localStorage
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY)
-      if (raw) setLimits(JSON.parse(raw))
-    } catch {}
-  }, [])
+  const now   = new Date()
+  const month = now.getMonth() + 1
+  const year  = now.getFullYear()
 
-  const saveLimits = (next: Record<string, number>) => {
-    setLimits(next)
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+  const loadLimits = async () => {
+    const supabase = createClient()
+    const { data } = await supabase
+      .from("budget_limits")
+      .select("*")
+      .eq("month", month)
+      .eq("year", year)
+    setDbRows(data ?? [])
   }
 
-  const handleAddLimit = () => {
+  useEffect(() => { loadLimits() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleAddLimit = async () => {
     const amt = parseFloat(newAmt.replace(",", "."))
     if (!amt || amt <= 0) return
-    saveLimits({ ...limits, [newCat]: amt })
-    setNewAmt(""); setShowAdd(false)
+    setSaving(true)
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { setSaving(false); return }
+    const cat = BUDGET_CATS.find(c => c.id === newCat)!
+    await supabase.from("budget_limits").upsert({
+      user_id:        user.id,
+      month,
+      year,
+      category_key:   cat.id,
+      category_emoji: cat.emoji,
+      category_label: cat.label,
+      amount_limit:   amt,
+      updated_at:     new Date().toISOString(),
+    }, { onConflict: "user_id,month,year,category_key" })
+    setNewAmt(""); setShowAdd(false); setSaving(false)
+    loadLimits()
   }
 
-  const handleRemove = (id: string) => {
-    const next = { ...limits }
-    delete next[id]
-    saveLimits(next)
+  const handleRemove = async (categoryKey: string) => {
+    const supabase = createClient()
+    await supabase.from("budget_limits")
+      .delete()
+      .eq("category_key", categoryKey)
+      .eq("month", month)
+      .eq("year", year)
+    setDbRows(prev => prev.filter(r => r.category_key !== categoryKey))
   }
 
   // Compute actual spending this month from transactions, matched by emoji in notes
-  const now         = new Date()
-  const monthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
+  const monthPrefix = `${year}-${String(month).padStart(2, "0")}`
   const spent: Record<string, number> = {}
   for (const t of transactions) {
     if (t.type !== "expense") continue
@@ -190,17 +210,22 @@ function BudgetVsReal({ transactions }: { transactions: any[] }) {
     if (cat) spent[cat.id] = (spent[cat.id] ?? 0) + t.amount
   }
 
-  // Build rows: all cats that have a limit OR have spending
-  const rows = BUDGET_CATS
-    .filter(c => limits[c.id] !== undefined || spent[c.id])
-    .map(c => {
-      const limit  = limits[c.id] ?? 0
-      const actual = spent[c.id]  ?? 0
+  // Build rows from DB limits + any spending without a limit
+  const limitedKeys = new Set(dbRows.map((r: any) => r.category_key))
+  const spentOnlyKeys = Object.keys(spent).filter(k => !limitedKeys.has(k))
+
+  const rows = [
+    ...dbRows.map((r: any) => {
+      const actual = spent[r.category_key] ?? 0
+      const limit  = Number(r.amount_limit)
       const pct    = limit > 0 ? (actual / limit) * 100 : 0
-      const over   = limit > 0 && actual > limit
-      return { ...c, limit, actual, pct, over }
-    })
-    .sort((a, b) => b.pct - a.pct)
+      return { id: r.category_key, emoji: r.category_emoji, label: r.category_label, limit, actual, pct, over: limit > 0 && actual > limit }
+    }),
+    ...spentOnlyKeys.map(k => {
+      const cat = BUDGET_CATS.find(c => c.id === k)
+      return { id: k, emoji: cat?.emoji ?? "💸", label: cat?.label ?? k, limit: 0, actual: spent[k], pct: 0, over: false }
+    }),
+  ].sort((a, b) => b.pct - a.pct)
 
   const totalLimit = rows.reduce((s, r) => s + r.limit, 0)
   const totalSpent = rows.reduce((s, r) => s + r.actual, 0)
@@ -237,10 +262,10 @@ function BudgetVsReal({ transactions }: { transactions: any[] }) {
               className="w-full pl-9 h-11 rounded-xl border text-sm bg-card px-3"
             />
           </div>
-          <button onClick={handleAddLimit} disabled={!newAmt}
+          <button onClick={handleAddLimit} disabled={!newAmt || saving}
             className="w-full h-10 rounded-xl text-white text-sm font-bold disabled:opacity-40"
             style={{ background: "linear-gradient(135deg,#7c3aed,#6d28d9)" }}>
-            ✓ Salvar limite
+            {saving ? "Salvando..." : "✓ Salvar limite"}
           </button>
         </div>
       )}

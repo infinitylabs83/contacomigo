@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
@@ -8,6 +8,7 @@ import { Home, Wallet, Building2, Target, Settings, Bell, User } from "lucide-re
 import { cn } from "@/lib/utils"
 import { ThemeToggle } from "./theme-toggle"
 import { Button } from "@/components/ui/button"
+import { createClient } from "@/lib/supabase/client"
 
 const NAV_LEFT = [
   { href: "/dashboard",    label: "Início",         icon: Home    },
@@ -20,6 +21,14 @@ const NAV_RIGHT = [
 
 export function TopNav() {
   const pathname = usePathname()
+  const [firstName, setFirstName] = useState("")
+
+  useEffect(() => {
+    createClient().auth.getUser().then(({ data: { user } }) => {
+      const name = user?.user_metadata?.full_name as string ?? ""
+      setFirstName(name.split(" ")[0] ?? "")
+    })
+  }, [])
 
   const openLancar = () => {
     window.dispatchEvent(new CustomEvent("quick-add-open"))
@@ -35,7 +44,7 @@ export function TopNav() {
           <path d="M22 13.5 A4.5 4.5 0 1 0 22 18.5" stroke="rgba(255,255,255,0.45)" strokeWidth="2" strokeLinecap="round" fill="none"/>
         </svg>
         <div className="flex flex-col leading-tight">
-          <span className="text-[11px] text-muted-foreground font-medium">Olá, Karol 👋</span>
+          <span className="text-[11px] text-muted-foreground font-medium">Olá, {firstName || "você"} 👋</span>
           <span className="font-black text-[15px] tracking-tight">Conta Comigo</span>
         </div>
       </Link>

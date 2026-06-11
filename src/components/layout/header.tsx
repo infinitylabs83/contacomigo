@@ -1,13 +1,11 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Bell, User } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "./theme-toggle"
-
-interface HeaderProps {
-  title?: string
-}
+import { createClient } from "@/lib/supabase/client"
 
 function LogoIcon() {
   return (
@@ -19,19 +17,27 @@ function LogoIcon() {
   )
 }
 
-export function Header({ title }: HeaderProps) {
+export function Header({ title }: { title?: string }) {
+  const [firstName, setFirstName] = useState("")
+
+  useEffect(() => {
+    createClient().auth.getUser().then(({ data: { user } }) => {
+      const name = user?.user_metadata?.full_name as string ?? ""
+      setFirstName(name.split(" ")[0] ?? "")
+    })
+  }, [])
+
   return (
     <header className="h-16 border-b bg-card flex items-center justify-between px-4 sticky top-0 z-40">
       <div className="flex items-center gap-2.5">
         <Link href="/dashboard" className="flex items-center gap-2.5">
           <LogoIcon />
           <div className="flex flex-col leading-tight">
-            <span className="text-[10px] text-muted-foreground font-medium">Olá, Karol 👋</span>
+            <span className="text-[10px] text-muted-foreground font-medium">Olá, {firstName || "você"} 👋</span>
             <span className="font-black text-sm tracking-tight">Conta Comigo</span>
           </div>
         </Link>
       </div>
-
       <div className="flex items-center gap-1 ml-auto">
         <ThemeToggle />
         <Button variant="ghost" size="icon-sm" aria-label="Notificações">

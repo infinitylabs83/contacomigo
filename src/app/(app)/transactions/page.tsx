@@ -1,13 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Search, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, Calendar, ArrowUp, ArrowDown } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid } from "recharts"
 import { formatCurrency, formatDate } from "@/lib/utils"
-import { DEMO_TRANSACTIONS, DEMO_CATEGORIES, DEMO_ACCOUNTS, DEMO_CARDS, DEMO_BUDGET_ITEMS } from "@/lib/demo-data"
-import type { TransactionType } from "@/types"
+import { createClient } from "@/lib/supabase/client"
+import type { TransactionType, Transaction, Category, Account, CreditCard } from "@/types"
 
 // ─── color / emoji maps ────────────────────────────────────────────────────────
 const CAT_COLOR: Record<string, string> = {
@@ -34,12 +34,12 @@ function getMondayOf(date: Date) {
   return d
 }
 
-function buildDailyData(weekOffset: number) {
+function buildDailyData(weekOffset: number, txns: any[] = []) {
   const today  = new Date()
   const monday = getMondayOf(today)
   monday.setDate(monday.getDate() + weekOffset * 7)
-  const expTxns  = DEMO_TRANSACTIONS.filter(t => t.type === "expense")
-  const catIds   = [...new Set(expTxns.map(t => t.category_id))]
+  const expTxns  = txns.filter(t => t.type === "expense")
+  const catIds   = [...new Set(expTxns.map((t: any) => t.category_id))]
   const todayStr = today.toISOString().slice(0, 10)
 
   return Array.from({ length: 7 }, (_, i) => {
@@ -61,15 +61,15 @@ function buildDailyData(weekOffset: number) {
   })
 }
 
-function getWeekTotal(weekOffset: number) {
+function getWeekTotal(weekOffset: number, txns: any[] = []) {
   const today  = new Date()
   const monday = getMondayOf(today)
   monday.setDate(monday.getDate() + weekOffset * 7)
   const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6)
-  return DEMO_TRANSACTIONS
-    .filter(t => t.type === "expense")
-    .filter(t => { const d = new Date(t.date); return d >= monday && d <= sunday })
-    .reduce((s, t) => s + t.amount, 0)
+  return txns
+    .filter((t: any) => t.type === "expense")
+    .filter((t: any) => { const d = new Date(t.date); return d >= monday && d <= sunday })
+    .reduce((s: number, t: any) => s + t.amount, 0)
 }
 
 function getWeekLabel(weekOffset: number) {
@@ -83,18 +83,18 @@ function getWeekLabel(weekOffset: number) {
 }
 
 // Monthly evolution — last 5 months
-function buildMonthlyEvolution() {
+function buildMonthlyEvolution(txns: any[] = []) {
   const today = new Date()
   return Array.from({ length: 5 }, (_, i) => {
     const d = new Date(today.getFullYear(), today.getMonth() - (4 - i), 1)
     const y = d.getFullYear(); const m = d.getMonth()
     const prefix = `${y}-${String(m + 1).padStart(2, "0")}`
-    const gastos  = DEMO_TRANSACTIONS
-      .filter(t => t.type === "expense" && t.date.startsWith(prefix))
-      .reduce((s, t) => s + t.amount, 0)
-    const entradas = DEMO_TRANSACTIONS
-      .filter(t => t.type === "income" && t.date.startsWith(prefix))
-      .reduce((s, t) => s + t.amount, 0)
+    const gastos  = txns
+      .filter((t: any) => t.type === "expense" && t.date.startsWith(prefix))
+      .reduce((s: number, t: any) => s + t.amount, 0)
+    const entradas = txns
+      .filter((t: any) => t.type === "income" && t.date.startsWith(prefix))
+      .reduce((s: number, t: any) => s + t.amount, 0)
     const isCurrent = m === today.getMonth() && y === today.getFullYear()
     return { label: MONTH_NAMES[m], gastos, entradas, isCurrent }
   })
@@ -130,17 +130,28 @@ type FilterKey = typeof FILTERS[number]["key"]
 
 // ─── Expectativa x Realidade ──────────────────────────────────────────────────
 function BudgetVsReal() {
-  const items = DEMO_BUDGET_ITEMS.map(item => {
-    const cat = DEMO_CATEGORIES.find(c => c.id === item.category_id)
-    const pct = item.amount_limit > 0 ? (item.amount_spent / item.amount_limit) * 100 : 0
-    const over = item.amount_spent > item.amount_limit
-    return { ...item, cat, pct, over }
-  }).sort((a, b) => b.pct - a.pct)
+  const [items, setItems] = useState<any[]>([])
+  useEffect(() => {
+    const supabase = createClient()
+    Promise.all([
+      supabase.from("budget_items").select("*"),
+      supabase.from("categories").select("*"),
+    ]).then(([b, c]) => {
+      const cats = c.data ?? []
+      const mapped = (b.data ?? []).map((item: any) => {
+        const cat = cats.find((x: any) => x.id === item.category_id)
+        const pct = item.amount_limit > 0 ? (item.amount_spent / item.amount_limit) * 100 : 0
+        const over = item.amount_spent > item.amount_limit
+        return { ...item, cat, pct, over }
+      }).sort((a: any, b: any) => b.pct - a.pct)
+      setItems(mapped)
+    })
+  }, [])
 
-  const totalLimit = items.reduce((s, i) => s + i.amount_limit, 0)
-  const totalSpent = items.reduce((s, i) => s + i.amount_spent, 0)
+  const totalLimit = items.reduce((s: number, i: any) => s + i.amount_limit, 0)
+  const totalSpent = items.reduce((s: number, i: any) => s + i.amount_spent, 0)
   const totalPct   = totalLimit > 0 ? (totalSpent / totalLimit) * 100 : 0
-  const overCount  = items.filter(i => i.over).length
+  const overCount  = items.filter((i: any) => i.over).length
 
   return (
     <div className="rounded-3xl border bg-card p-5 space-y-4">
@@ -218,14 +229,36 @@ export default function TransactionsPage() {
   const [calYear, setCalYear]       = useState(new Date().getFullYear())
   const [calMonth, setCalMonth]     = useState(new Date().getMonth())
 
-  const dailyData  = buildDailyData(weekOffset)
-  const weekLabel  = getWeekLabel(weekOffset)
-  const thisWeek   = getWeekTotal(weekOffset)
-  const prevWeek   = getWeekTotal(weekOffset - 1)
-  const weekDiff   = prevWeek > 0 ? ((thisWeek - prevWeek) / prevWeek) * 100 : 0
-  const monthlyData = buildMonthlyEvolution()
+  const [allTransactions, setAllTransactions] = useState<Transaction[]>([])
+  const [allCategories, setAllCategories]     = useState<Category[]>([])
+  const [allAccounts, setAllAccounts]         = useState<Account[]>([])
+  const [allCards, setAllCards]               = useState<CreditCard[]>([])
+  const [loading, setLoading]                 = useState(true)
 
-  const catIds = [...new Set(DEMO_TRANSACTIONS.filter(t => t.type === "expense").map(t => t.category_id))]
+  useEffect(() => {
+    const supabase = createClient()
+    Promise.all([
+      supabase.from("transactions").select("*").order("date", { ascending: false }),
+      supabase.from("categories").select("*"),
+      supabase.from("accounts").select("*"),
+      supabase.from("credit_cards").select("*"),
+    ]).then(([t, c, a, cc]) => {
+      setAllTransactions(t.data ?? [])
+      setAllCategories(c.data ?? [])
+      setAllAccounts(a.data ?? [])
+      setAllCards(cc.data ?? [])
+      setLoading(false)
+    })
+  }, [])
+
+  const dailyData  = buildDailyData(weekOffset, allTransactions)
+  const weekLabel  = getWeekLabel(weekOffset)
+  const thisWeek   = getWeekTotal(weekOffset, allTransactions)
+  const prevWeek   = getWeekTotal(weekOffset - 1, allTransactions)
+  const weekDiff   = prevWeek > 0 ? ((thisWeek - prevWeek) / prevWeek) * 100 : 0
+  const monthlyData = buildMonthlyEvolution(allTransactions)
+
+  const catIds = [...new Set(allTransactions.filter(t => t.type === "expense").map(t => t.category_id))]
   const catTotals = catIds
     .map(id => ({ id, total: dailyData.reduce((s, row) => s + (Number(row[id]) || 0), 0) }))
     .filter(c => c.total > 0)
@@ -233,15 +266,15 @@ export default function TransactionsPage() {
     .slice(0, 6)
   const grandTotal = catTotals.reduce((s, c) => s + c.total, 0)
 
-  const totalIncome   = DEMO_TRANSACTIONS.filter(t => t.type === "income").reduce((s, t) => s + t.amount, 0)
-  const cashExpense   = DEMO_TRANSACTIONS.filter(t => t.type === "expense" && !t.card_id).reduce((s, t) => s + t.amount, 0)
-  const creditExpense = DEMO_TRANSACTIONS.filter(t => t.type === "expense" && !!t.card_id).reduce((s, t) => s + t.amount, 0)
+  const totalIncome   = allTransactions.filter(t => t.type === "income").reduce((s, t) => s + t.amount, 0)
+  const cashExpense   = allTransactions.filter(t => t.type === "expense" && !t.card_id).reduce((s, t) => s + t.amount, 0)
+  const creditExpense = allTransactions.filter(t => t.type === "expense" && !!t.card_id).reduce((s, t) => s + t.amount, 0)
 
-  const categoryMap = Object.fromEntries(DEMO_CATEGORIES.map(c => [c.id, c]))
-  const accountMap  = Object.fromEntries(DEMO_ACCOUNTS.map(a => [a.id, a]))
-  const cardMap     = Object.fromEntries(DEMO_CARDS.map(c => [c.id, c]))
+  const categoryMap = Object.fromEntries(allCategories.map(c => [c.id, c]))
+  const accountMap  = Object.fromEntries(allAccounts.map(a => [a.id, a]))
+  const cardMap     = Object.fromEntries(allCards.map(c => [c.id, c]))
 
-  const transactions = DEMO_TRANSACTIONS
+  const transactions = allTransactions
     .filter(t => {
       if (filter === "credit")    return !!t.card_id
       if (filter === "recurring") return t.is_recurring
@@ -375,7 +408,7 @@ export default function TransactionsPage() {
               <YAxis hide />
               <Tooltip
                 formatter={(v: unknown, name: unknown) => {
-                  const cat = DEMO_CATEGORIES.find(c => c.id === String(name))
+                  const cat = allCategories.find((c: any) => c.id === String(name))
                   return [formatCurrency(Number(v)), `${CAT_EMOJI[String(name)] ?? "💸"} ${cat?.name ?? String(name)}`]
                 }}
                 labelFormatter={(_: unknown, payload: readonly any[]) => {
@@ -397,7 +430,7 @@ export default function TransactionsPage() {
         {/* Legend */}
         <div className="grid grid-cols-3 gap-x-4 gap-y-1.5">
           {catTotals.map(c => {
-            const cat = DEMO_CATEGORIES.find(x => x.id === c.id)
+            const cat = allCategories.find((x: any) => x.id === c.id)
             const pct = grandTotal > 0 ? Math.round((c.total / grandTotal) * 100) : 0
             return (
               <div key={c.id} className="flex items-center gap-1.5 text-xs">

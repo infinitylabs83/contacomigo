@@ -1,16 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Plus, TrendingUp, TrendingDown, AlertTriangle, MoreHorizontal, Pencil, Trash2, X, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { MoneyText } from "@/components/ui/money-text"
 import { formatCurrency } from "@/lib/utils"
-import {
-  DEMO_ACCOUNTS, DEMO_TRANSACTIONS, DEMO_CARDS,
-  DEMO_DEBTS,
-} from "@/lib/demo-data"
+import { createClient } from "@/lib/supabase/client"
 import type { Account } from "@/types"
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -40,10 +37,7 @@ function subEmoji(name: string) {
 const SUBSCRIPTION_CATS = new Set(["cat-subs", "cat-gym", "cat-internet", "cat-education", "cat-streaming"])
 
 // Derive subscriptions from transactions (is_recurring + expense + subscription-like category OR tag "assinatura")
-const DERIVED_SUBS = DEMO_TRANSACTIONS.filter(
-  t => t.type === "expense" && t.is_recurring &&
-    (SUBSCRIPTION_CATS.has(t.category_id) || t.tags?.includes("assinatura"))
-)
+// subscriptions loaded dynamically per user
 
 const ACCOUNT_COLORS = ["#8B5CF6","#F97316","#10B981","#3B82F6","#EC4899","#F59E0B","#14B8A6","#6366F1"]
 const ACCOUNT_TYPES = [
@@ -194,9 +188,8 @@ function TabContas({ accounts, onEdit, onAdd }: { accounts: Account[]; onEdit: (
       </motion.div>
 
       {active.map((account, i) => {
-        const txns    = DEMO_TRANSACTIONS.filter(t => t.account_id === account.id)
-        const income  = txns.filter(t => t.type === "income").reduce((s, t) => s + t.amount, 0)
-        const expense = txns.filter(t => t.type === "expense").reduce((s, t) => s + t.amount, 0)
+        const income  = 0
+        const expense = 0
         return (
           <motion.div key={account.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.07 }} className="rounded-3xl border bg-card p-5">
@@ -263,19 +256,30 @@ function TabContas({ accounts, onEdit, onAdd }: { accounts: Account[]; onEdit: (
 }
 
 function TabCartoes() {
+  const [cards, setCards] = useState<any[]>([])
+  useEffect(() => {
+    createClient().from("credit_cards").select("*").order("created_at", { ascending: true })
+      .then(({ data }) => setCards(data ?? []))
+  }, [])
   const today = new Date()
+  if (cards.length === 0) return (
+    <div className="text-center py-12 text-muted-foreground">
+      <p className="text-4xl mb-3">💳</p>
+      <p className="font-medium">Nenhum cartão cadastrado ainda</p>
+    </div>
+  )
   return (
     <div className="space-y-4">
-      {DEMO_CARDS.map((card, idx) => {
-        const usedPct = Math.min((card.limit_used / card.limit_total) * 100, 100)
-        const available = card.limit_total - card.limit_used
+      {cards.map((card, idx) => {
+        const usedPct = Math.min(((card.limit_used ?? 0) / (card.limit_total ?? 1)) * 100, 100)
+        const available = (card.limit_total ?? 0) - (card.limit_used ?? 0)
         const dueDate = new Date(today.getFullYear(), today.getMonth(), card.due_day)
         if (dueDate < today) dueDate.setMonth(dueDate.getMonth() + 1)
         const daysUntilDue = Math.ceil((dueDate.getTime() - today.getTime()) / 86400000)
         const isUrgent = daysUntilDue <= 5
         const ringC = 2 * Math.PI * 30
         const dash = (usedPct / 100) * ringC
-        const cardTxns = DEMO_TRANSACTIONS.filter(t => t.card_id === card.id)
+        const cardTxns: any[] = []
 
         return (
           <motion.div key={card.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
@@ -355,12 +359,23 @@ function TabCartoes() {
 }
 
 function TabDevo() {
-  const totalDebt    = DEMO_DEBTS.reduce((s, d) => s + d.current_balance, 0)
-  const totalOriginal = DEMO_DEBTS.reduce((s, d) => s + d.original_amount, 0)
+  const [debts, setDebts] = useState<any[]>([])
+  useEffect(() => {
+    createClient().from("debts").select("*").order("created_at", { ascending: false })
+      .then(({ data }) => setDebts(data ?? []))
+  }, [])
+  const totalDebt    = debts.reduce((s, d) => s + (d.current_balance ?? 0), 0)
+  const totalOriginal = debts.reduce((s, d) => s + (d.original_amount ?? 0), 0)
   const totalPaid    = totalOriginal - totalDebt
-  const paidPct      = Math.min((totalPaid / totalOriginal) * 100, 100)
+  const paidPct      = totalOriginal > 0 ? Math.min((totalPaid / totalOriginal) * 100, 100) : 0
   const ringC = 2 * Math.PI * 36
   const dash  = (paidPct / 100) * ringC
+  if (debts.length === 0) return (
+    <div className="text-center py-12 text-muted-foreground">
+      <p className="text-4xl mb-3">🎉</p>
+      <p className="font-medium">Nenhuma dívida cadastrada</p>
+    </div>
+  )
 
   return (
     <div className="space-y-4">
@@ -385,7 +400,7 @@ function TabDevo() {
         </div>
       </motion.div>
 
-      {DEMO_DEBTS.map((debt, i) => {
+      {debts.map((debt, i) => {
         const pct = Math.min(((debt.original_amount - debt.current_balance) / debt.original_amount) * 100, 100)
         const r2 = 2 * Math.PI * 20
         const d2 = (pct / 100) * r2
@@ -425,10 +440,13 @@ function TabDevo() {
 }
 
 function TabAssino() {
-  // Derived directly from transactions — is_recurring + expense + subscription-like category
-  const subs = DERIVED_SUBS
-  const totalMonthly = subs.reduce((s, t) => s + t.amount, 0)
-  const toReview = subs.filter(t => t.tags?.includes("assinatura") && t.category_id === "cat-subs")
+  const [subs, setSubs] = useState<any[]>([])
+  useEffect(() => {
+    createClient().from("subscriptions").select("*").order("created_at", { ascending: false })
+      .then(({ data }) => setSubs(data ?? []))
+  }, [])
+  const totalMonthly = subs.reduce((s, t) => s + (t.amount ?? 0), 0)
+  const toReview = subs.filter((t: any) => t.status === "active")
 
   return (
     <div className="space-y-4">
@@ -488,26 +506,38 @@ function TabAssino() {
 
 export default function AccountsPage() {
   const [tab, setTab]             = useState<TabId>("contas")
-  const [accounts, setAccounts]   = useState<Account[]>(DEMO_ACCOUNTS)
+  const [accounts, setAccounts]   = useState<Account[]>([])
   const [sheet, setSheet]         = useState<"add" | Account | null>(null)
+  const [userId, setUserId]       = useState<string>("")
 
-  function handleSave(data: Partial<Account> & { name: string; type: string; institution: string; current_balance: number; color: string }) {
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) setUserId(user.id)
+    })
+    supabase.from("accounts").select("*").order("created_at", { ascending: true })
+      .then(({ data }) => setAccounts(data ?? []))
+  }, [])
+
+  async function handleSave(data: Partial<Account> & { name: string; type: string; institution: string; current_balance: number; color: string }) {
+    const supabase = createClient()
     if (sheet === "add") {
-      const newAcc: Account = {
-        id: `acc-${Date.now()}`, user_id: "demo", is_active: true,
-        initial_balance: data.current_balance, icon: "building-2",
-        created_at: new Date().toISOString(),
-        ...data,
-      }
-      setAccounts(prev => [...prev, newAcc])
+      const { data: newAcc } = await supabase.from("accounts").insert({
+        user_id: userId, is_active: true, initial_balance: data.current_balance,
+        icon: "building-2", ...data,
+      }).select().single()
+      if (newAcc) setAccounts(prev => [...prev, newAcc as Account])
     } else if (sheet && typeof sheet === "object") {
-      setAccounts(prev => prev.map(a => a.id === sheet.id ? { ...a, ...data } : a))
+      await supabase.from("accounts").update(data).eq("id", (sheet as Account).id)
+      setAccounts(prev => prev.map(a => a.id === (sheet as Account).id ? { ...a, ...data } : a))
     }
     setSheet(null)
   }
 
-  function handleDelete() {
+  async function handleDelete() {
     if (sheet && typeof sheet === "object") {
+      const supabase = createClient()
+      await supabase.from("accounts").delete().eq("id", (sheet as Account).id)
       setAccounts(prev => prev.filter(a => a.id !== (sheet as Account).id))
       setSheet(null)
     }

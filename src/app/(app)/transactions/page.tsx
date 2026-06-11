@@ -15,12 +15,14 @@ const CAT_COLOR: Record<string, string> = {
   "cat-leisure": "#EC4899", "cat-health": "#EF4444", "cat-subs": "#0EA5E9",
   "cat-education": "#8B5CF6", "cat-other": "#9CA3AF", "cat-housing": "#6B7280",
   "cat-gym": "#F59E0B", "cat-internet": "#14B8A6",
+  "__none__": "#7c3aed",
 }
 const CAT_EMOJI: Record<string, string> = {
   "cat-food": "🍔", "cat-market": "🛒", "cat-transport": "🚗", "cat-leisure": "🎮",
   "cat-health": "💊", "cat-subs": "📱", "cat-education": "📚", "cat-other": "💸",
   "cat-housing": "🏠", "cat-salary": "💼", "cat-freelance": "💻", "cat-reimbursement": "🔄",
   "cat-gym": "🏋️", "cat-internet": "📶",
+  "__none__": "💸",
 }
 const DAY_LABELS  = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
 const MONTH_NAMES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
@@ -39,7 +41,7 @@ function buildDailyData(weekOffset: number, txns: any[] = []) {
   const monday = getMondayOf(today)
   monday.setDate(monday.getDate() + weekOffset * 7)
   const expTxns  = txns.filter(t => t.type === "expense")
-  const catIds   = [...new Set(expTxns.map((t: any) => t.category_id))]
+  const rawCatIds = [...new Set(expTxns.map((t: any) => t.category_id ?? "__none__"))] as string[]
   const todayStr = today.toISOString().slice(0, 10)
 
   return Array.from({ length: 7 }, (_, i) => {
@@ -52,9 +54,9 @@ function buildDailyData(weekOffset: number, txns: any[] = []) {
       isToday: dateStr === todayStr,
       isFuture: date > today,
     }
-    catIds.forEach(cid => {
+    rawCatIds.forEach(cid => {
       row[cid] = expTxns
-        .filter(t => t.date === dateStr && t.category_id === cid)
+        .filter(t => t.date === dateStr && (t.category_id ?? "__none__") === cid)
         .reduce((s, t) => s + t.amount, 0)
     })
     return row
@@ -355,7 +357,7 @@ export default function TransactionsPage() {
   const weekDiff   = prevWeek > 0 ? ((thisWeek - prevWeek) / prevWeek) * 100 : 0
   const monthlyData = buildMonthlyEvolution(allTransactions)
 
-  const catIds = [...new Set(allTransactions.filter(t => t.type === "expense").map(t => t.category_id))]
+  const catIds = [...new Set(allTransactions.filter(t => t.type === "expense").map(t => t.category_id ?? "__none__"))] as string[]
   const catTotals = catIds
     .map(id => ({ id, total: dailyData.reduce((s, row) => s + (Number(row[id]) || 0), 0) }))
     .filter(c => c.total > 0)

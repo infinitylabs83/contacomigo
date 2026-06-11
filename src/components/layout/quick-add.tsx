@@ -299,7 +299,11 @@ export function QuickAdd() {
                       <p className="text-lg font-black mb-1">O que foi isso?</p>
                       <p className="text-sm text-muted-foreground mb-4">Uma palavra já basta.</p>
                       <Input autoFocus
-                        placeholder={mode === "expense" ? "ex: flanelinha, gorjeta..." : "ex: vaquinha, presente recebido..."}
+                        placeholder={
+                          selectedCat?.id === "cat-subs" ? "ex: Netflix, Spotify, academia..." :
+                          mode === "expense" ? "ex: almoço, farmácia, presente..." :
+                          "ex: vaquinha, presente recebido..."
+                        }
                         value={description} onChange={e => setDescription(e.target.value)}
                         onKeyDown={e => { if (e.key === "Enter" && description.trim()) setStep("amount") }}
                         className="rounded-2xl text-base h-12 border-2 focus-visible:border-primary"

@@ -875,8 +875,8 @@ function TabAssino({ userId }: { userId: string }) {
         <p className="text-white/60 text-xs mt-1">{formatCurrency(totalMonthly * 12)} por ano</p>
       </motion.div>
 
-      <div className="rounded-2xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-3.5 text-sm text-blue-700 dark:text-blue-400">
-        💡 Lançamentos marcados como <strong>Recorrente</strong> aparecem aqui automaticamente.
+      <div className="rounded-2xl bg-muted/60 border border-border p-3.5 text-sm text-foreground">
+        💡 Lançamentos da categoria <strong>Assinatura</strong> aparecem aqui automaticamente.
       </div>
 
       {subs.length === 0 ? (

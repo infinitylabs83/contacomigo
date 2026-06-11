@@ -54,6 +54,7 @@ export function QuickAdd() {
   const [payMethod, setPayMethod]     = useState<PayMethod>("cash")
   const [creditCardId, setCreditCardId] = useState("")
   const [installments, setInstallments] = useState(1)
+  const [isRecurring, setIsRecurring]  = useState(false)
   const [saving, setSaving]           = useState(false)
   const [accounts, setAccounts]       = useState<RealAccount[]>([])
   const [cards, setCards]             = useState<RealCard[]>([])
@@ -84,7 +85,7 @@ export function QuickAdd() {
   const reset = () => {
     setStep("type"); setMode("expense"); setSelectedCat(null)
     setAmount(""); setDescription(""); setShowDetails(false)
-    setDone(false); setSaving(false)
+    setDone(false); setSaving(false); setIsRecurring(false)
     setPayMethod("cash"); setInstallments(1)
     if (accounts.length > 0) setAccountId(accounts[0].id)
     if (cards.length > 0) setCreditCardId(cards[0].id)
@@ -104,6 +105,7 @@ export function QuickAdd() {
   const handleCategory = (cat: Cat) => {
     setSelectedCat(cat)
     setDescription("")
+    if (cat.id === "cat-subs") setIsRecurring(true)
     if (cat.id === "cat-other" || cat.id === "cat-other-in") {
       setStep("describe")
     } else {
@@ -149,7 +151,7 @@ export function QuickAdd() {
         is_installment: payMethod === "credit" && installments > 1,
         installment_total: payMethod === "credit" ? installments : null,
         installment_current: payMethod === "credit" ? 1 : null,
-        is_recurring:   false,
+        is_recurring:   isRecurring,
         tags:           [],
         notes:          selectedCat ? `${selectedCat.emoji}|${selectedCat.label}` : null,
       }
@@ -159,6 +161,19 @@ export function QuickAdd() {
       }
 
       await supabase.from("transactions").insert(transaction)
+
+      // If recurring, add to subscriptions table if not already present
+      if (isRecurring && mode === "expense") {
+        const todayDate = new Date()
+        const { data: existing } = await supabase.from("subscriptions")
+          .select("id").eq("user_id", user.id).ilike("name", label).maybeSingle()
+        if (!existing) {
+          await supabase.from("subscriptions").insert({
+            user_id: user.id, name: label, amount: parsed,
+            billing_cycle: "monthly", billing_day: todayDate.getDate(), status: "active",
+          })
+        }
+      }
 
       window.dispatchEvent(new CustomEvent("transaction-added"))
 
@@ -378,6 +393,24 @@ export function QuickAdd() {
                         </div>
                       )}
                     </div>
+                  )}
+
+                  {/* Recurring toggle */}
+                  {mode === "expense" && (
+                    <button onClick={() => setIsRecurring(!isRecurring)}
+                      className={`flex items-center gap-2.5 w-full p-3 rounded-2xl border-2 mb-3 text-left transition-all ${
+                        isRecurring ? "border-primary bg-primary/8" : "border-border/50 bg-muted/20"
+                      }`}>
+                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${
+                        isRecurring ? "border-primary bg-primary" : "border-muted-foreground"
+                      }`}>
+                        {isRecurring && <Check className="size-3 text-white" />}
+                      </div>
+                      <div>
+                        <p className={`text-xs font-bold ${isRecurring ? "text-primary" : "text-foreground"}`}>🔁 Gasto recorrente (assino todo mês)</p>
+                        <p className="text-[10px] text-muted-foreground">aparece na aba "Assino todo mês"</p>
+                      </div>
+                    </button>
                   )}
 
                   {/* Optional details */}

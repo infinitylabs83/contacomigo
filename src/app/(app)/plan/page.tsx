@@ -72,7 +72,7 @@ function TabSonhos() {
         const pct = goal.target_amount > 0 ? Math.round((goal.current_amount / goal.target_amount) * 100) : 0
         const remaining = goal.target_amount - goal.current_amount
         const priority = PRIORITY_CONFIG[(goal as any).priority ?? "medium"]
-        const monthsLeft = goal.monthly_contribution > 0 ? Math.ceil(remaining / goal.monthly_contribution) : null
+        const monthsLeft = (goal.monthly_contribution ?? 0) > 0 ? Math.ceil(remaining / (goal.monthly_contribution ?? 1)) : null
 
         return (
           <motion.div key={goal.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
@@ -117,7 +117,7 @@ function TabSonhos() {
 
             {monthsLeft !== null && (
               <p className="text-xs text-muted-foreground bg-muted/40 rounded-2xl px-3 py-2">
-                Guardando <strong className="text-foreground">{formatCurrency(goal.monthly_contribution)}/mês</strong> você chega lá em{" "}
+                Guardando <strong className="text-foreground">{formatCurrency(goal.monthly_contribution ?? 0)}/mês</strong> você chega lá em{" "}
                 <strong className="text-foreground">{monthsLeft} meses</strong> 🚀
               </p>
             )}
@@ -313,8 +313,8 @@ function TabOQueFazer() {
               {task.description && <p className="text-xs text-muted-foreground mt-0.5">{task.description}</p>}
               <span className="text-[10px] font-semibold mt-1 inline-block text-muted-foreground">{p.label}</span>
             </div>
-            {task.amount && (
-              <p className="text-sm font-bold text-primary shrink-0">{formatCurrency(task.amount)}</p>
+            {(task as any).amount && (
+              <p className="text-sm font-bold text-primary shrink-0">{formatCurrency((task as any).amount)}</p>
             )}
           </motion.div>
         )

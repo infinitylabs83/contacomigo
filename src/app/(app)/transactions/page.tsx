@@ -378,7 +378,7 @@ export default function TransactionsPage() {
                   const cat = DEMO_CATEGORIES.find(c => c.id === String(name))
                   return [formatCurrency(Number(v)), `${CAT_EMOJI[String(name)] ?? "💸"} ${cat?.name ?? String(name)}`]
                 }}
-                labelFormatter={(_: unknown, payload: any[]) => {
+                labelFormatter={(_: unknown, payload: readonly any[]) => {
                   if (payload?.[0]) { const r = payload[0].payload as any; return `${r.day}, ${r.dayNum}/${r.month}` }
                   return ""
                 }}

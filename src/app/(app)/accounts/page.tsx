@@ -47,10 +47,10 @@ const DERIVED_SUBS = DEMO_TRANSACTIONS.filter(
 
 const ACCOUNT_COLORS = ["#8B5CF6","#F97316","#10B981","#3B82F6","#EC4899","#F59E0B","#14B8A6","#6366F1"]
 const ACCOUNT_TYPES = [
-  { id: "checking",   label: "Conta corrente", emoji: "🏦" },
-  { id: "savings",    label: "Poupança",        emoji: "🐷" },
-  { id: "wallet",     label: "Carteira",        emoji: "👛" },
-  { id: "investment", label: "Investimento",    emoji: "📈" },
+  { id: "checking"   as const, label: "Conta corrente", emoji: "🏦" },
+  { id: "savings"    as const, label: "Poupança",        emoji: "🐷" },
+  { id: "wallet"     as const, label: "Carteira",        emoji: "👛" },
+  { id: "investment" as const, label: "Investimento",    emoji: "📈" },
 ]
 
 const TABS = [

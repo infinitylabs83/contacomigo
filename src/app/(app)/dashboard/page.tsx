@@ -82,24 +82,28 @@ export default async function DashboardPage() {
         { id: "m4", title: "Definir limite para uma categoria", points: 40, is_completed: hasBudget, progress: hasBudget ? 1 : 0, total: 1 },
       ]
 
+  // When no income registered this month, show total account balance as "available"
+  const noMonthlyData = income === 0 && expense === 0
+  const displayFree   = noMonthlyData ? totalBalance : balance
+
   const summary: FinancialSummary = {
     totalBalance,
     monthIncome:   income,
     monthExpenses: expense,
-    freeMoney:     balance,
+    freeMoney:     displayFree,
     upcomingBills: { amount: 0, count: 0, soonest: null },
     openInvoices:  0,
     healthScore:   gamification?.health_score ?? 0,
-    alertLevel:    balance >= 0 ? "safe" : balance > -500 ? "attention" : "danger",
-    topInsight:    income === 0
-      ? "Registre sua primeira renda para começar!"
+    alertLevel:    displayFree >= 0 ? "safe" : displayFree > -500 ? "attention" : "danger",
+    topInsight:    noMonthlyData
+      ? "Este é o saldo total das suas contas 🏦"
       : balance >= 0
         ? "Você está no azul este mês 🎉"
         : "Seus gastos superaram a renda este mês ⚠️",
     nextAction: accounts.length === 0
       ? { label: "Criar primeira conta", href: "/accounts" }
       : income === 0
-        ? { label: "Registrar renda", href: "/transactions" }
+        ? { label: "Registrar renda do mês", href: "/transactions" }
         : { label: "Ver movimentações", href: "/transactions" },
   }
 

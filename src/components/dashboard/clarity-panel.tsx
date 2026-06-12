@@ -29,7 +29,9 @@ export function ClarityPanel({ summary }: ClarityPanelProps) {
         {/* Header */}
         <div className="flex items-center gap-2">
           <Sparkles className="size-4" style={{ color: "rgba(255,255,255,0.65)" }} />
-          <p className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.70)" }}>Dinheiro livre este mês</p>
+          <p className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.70)" }}>
+            {summary.monthIncome === 0 && summary.monthExpenses === 0 ? "Saldo disponível" : "Dinheiro livre este mês"}
+          </p>
         </div>
 
         {/* Big number */}
@@ -43,9 +45,7 @@ export function ClarityPanel({ summary }: ClarityPanelProps) {
             {formatCurrency(summary.freeMoney)}
           </motion.p>
           <p className="text-sm mt-1" style={{ color: "rgba(255,255,255,0.65)" }}>
-            {freeMoneyPositive
-              ? "Você pode gastar isso com segurança ainda este mês 🎉"
-              : "Atenção: você gastou mais do que ganhou este mês ⚠️"}
+            {summary.topInsight}
           </p>
         </div>
 

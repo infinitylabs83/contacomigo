@@ -31,13 +31,21 @@ export function SpendingChart({ items }: SpendingChartProps) {
     <div className="rounded-3xl border bg-card p-4 space-y-3">
       <div>
         <p className="text-sm font-bold">🥧 Gastos por categoria</p>
-        {data[0] && (
+        {data[0] ? (
           <p className="text-xs text-muted-foreground">
             Maior gasto: <strong>{data[0].name}</strong> com {formatCurrency(data[0].value)}
           </p>
+        ) : (
+          <p className="text-xs text-muted-foreground">Gastos deste mês por categoria</p>
         )}
       </div>
 
+      {data.length === 0 ? (
+        <div className="text-center py-5">
+          <p className="text-2xl mb-1">📊</p>
+          <p className="text-sm text-muted-foreground">Lance gastos para ver o gráfico</p>
+        </div>
+      ) : (
       <div className="flex items-center gap-4">
         <div className="w-28 h-28 shrink-0">
           <ResponsiveContainer width="99%" height="100%">
@@ -65,6 +73,7 @@ export function SpendingChart({ items }: SpendingChartProps) {
           ))}
         </div>
       </div>
+      )}
     </div>
   )
 }

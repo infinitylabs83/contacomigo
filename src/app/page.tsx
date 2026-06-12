@@ -4,11 +4,13 @@ import { useState, useEffect } from "react"
 import { motion, useInView } from "framer-motion"
 import { useRef } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import {
   CheckCircle, X, ChevronDown, ChevronUp,
   ArrowRight, Check, Shield, Smartphone, TrendingUp, Gift, Zap,
 } from "lucide-react"
 import { ButtonLink } from "@/components/ui/button-link"
+import { createClient } from "@/lib/supabase/client"
 
 // Cores fixas — nunca mudam com dark mode
 const C = {
@@ -175,13 +177,26 @@ function FAQ() {
 
 /* ─── PAGE ───────────────────────────────────────────────────────────────── */
 export default function LandingPage() {
-  // Força modo claro independente do tema do dispositivo
+  const router = useRouter()
+  const [sessionEmail, setSessionEmail] = useState<string | null>(null)
+
   useEffect(() => {
+    // Força modo claro
     const html = document.documentElement
     const hadDark = html.classList.contains("dark")
     html.classList.remove("dark")
+    // Detecta sessão ativa
+    createClient().auth.getUser().then(({ data }) => {
+      if (data.user?.email) setSessionEmail(data.user.email)
+    })
     return () => { if (hadDark) html.classList.add("dark") }
   }, [])
+
+  async function handleSignOut() {
+    await createClient().auth.signOut()
+    setSessionEmail(null)
+    router.refresh()
+  }
 
   return (
     <div className="min-h-screen overflow-x-hidden" style={{ background: C.bg, color: C.text }}>
@@ -199,11 +214,28 @@ export default function LandingPage() {
             <a href="#faq" className="hover:text-gray-900 transition-colors">Dúvidas</a>
           </div>
           <div className="flex items-center gap-2">
-            <Link href="/login" className="px-3 py-2 rounded-lg text-sm font-medium transition-colors" style={{ color: C.muted }}>Entrar</Link>
-            <Link href="/register" className="px-4 py-2 rounded-xl text-sm font-bold text-white"
-              style={{ background: `linear-gradient(135deg,${C.primary},${C.primaryD})` }}>
-              Acesso grátis
-            </Link>
+            {sessionEmail ? (
+              <>
+                <span className="hidden sm:block text-xs max-w-[140px] truncate" style={{ color: C.muted }}>{sessionEmail}</span>
+                <Link href="/dashboard" className="px-4 py-2 rounded-xl text-sm font-bold text-white"
+                  style={{ background: `linear-gradient(135deg,${C.primary},${C.primaryD})` }}>
+                  Ir para o app
+                </Link>
+                <button onClick={handleSignOut}
+                  className="px-3 py-2 rounded-lg text-sm font-medium transition-colors hover:bg-red-50"
+                  style={{ color: "#dc2626", border: `1px solid #fca5a5` }}>
+                  Sair
+                </button>
+              </>
+            ) : (
+              <>
+                <Link href="/login" className="px-3 py-2 rounded-lg text-sm font-medium transition-colors" style={{ color: C.muted }}>Entrar</Link>
+                <Link href="/register" className="px-4 py-2 rounded-xl text-sm font-bold text-white"
+                  style={{ background: `linear-gradient(135deg,${C.primary},${C.primaryD})` }}>
+                  Acesso grátis
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </nav>

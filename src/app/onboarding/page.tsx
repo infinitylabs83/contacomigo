@@ -111,6 +111,15 @@ function SkipBtn({ onSkip }: { onSkip: () => void }) {
   )
 }
 
+function BackBtn({ onClick }: { onClick: () => void }) {
+  return (
+    <button onClick={onClick}
+      className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors mb-1">
+      ← Voltar
+    </button>
+  )
+}
+
 function StepTitle({ emoji, title, desc }: { emoji: string; title: string; desc: string }) {
   return (
     <div>
@@ -126,25 +135,42 @@ function StepTitle({ emoji, title, desc }: { emoji: string; title: string; desc:
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 const incomeCategories = [
-  { id: "Salário",  emoji: "💼" },
-  { id: "Freela",   emoji: "💻" },
-  { id: "Aluguel",  emoji: "🏘️" },
-  { id: "Outros",   emoji: "💰" },
+  { id: "Salário",   emoji: "💼" },
+  { id: "Autônomo",  emoji: "💻" },
+  { id: "Aluguel",   emoji: "🏘️" },
+  { id: "Outros",    emoji: "💰" },
 ]
+const incomeCatIdMap: Record<string, string> = {
+  "Salário":  "cat-salary",
+  "Autônomo": "cat-freelance",
+  "Aluguel":  "cat-rent-in",
+  "Outros":   "cat-other-in",
+}
 const expenseCategories = [
   { id: "🍔|Comida",      emoji: "🍔", label: "Comida" },
   { id: "🛒|Mercado",     emoji: "🛒", label: "Mercado" },
   { id: "🚗|Transporte",  emoji: "🚗", label: "Transporte" },
   { id: "🏠|Moradia",     emoji: "🏠", label: "Moradia" },
   { id: "💊|Saúde",       emoji: "💊", label: "Saúde" },
+  { id: "🐾|Pet",         emoji: "🐾", label: "Pet" },
   { id: "🎮|Lazer",       emoji: "🎮", label: "Lazer" },
 ]
+const expenseCatIdMap: Record<string, string> = {
+  "🍔|Comida":     "cat-food",
+  "🛒|Mercado":    "cat-market",
+  "🚗|Transporte": "cat-transport",
+  "🏠|Moradia":    "cat-housing",
+  "💊|Saúde":      "cat-health",
+  "🐾|Pet":        "cat-pet",
+  "🎮|Lazer":      "cat-leisure",
+}
 const budgetCategories = [
   { id: "🍔|Comida",      emoji: "🍔", label: "Comida" },
   { id: "🛒|Mercado",     emoji: "🛒", label: "Mercado" },
   { id: "🚗|Transporte",  emoji: "🚗", label: "Transporte" },
   { id: "🏠|Moradia",     emoji: "🏠", label: "Moradia" },
   { id: "💊|Saúde",       emoji: "💊", label: "Saúde" },
+  { id: "🐾|Pet",         emoji: "🐾", label: "Pet" },
   { id: "🎮|Lazer",       emoji: "🎮", label: "Lazer" },
   { id: "📱|Assinatura",  emoji: "📱", label: "Assinatura" },
   { id: "📚|Estudo",      emoji: "📚", label: "Estudo" },
@@ -217,6 +243,10 @@ export default function OnboardingPage() {
     setStep((from + 1) as Step)
   }
 
+  function goBack() {
+    if (step > 1) setStep((step - 1) as Step)
+  }
+
   async function saveAccount(skip = false) {
     if (!skip && accName.trim()) {
       setSaving(true)
@@ -256,12 +286,12 @@ export default function OnboardingPage() {
       const { data: { user: u } } = await supabase.auth.getUser()
       const uid = u?.id ?? userId
       const valMap: Record<string, number> = { "ate-2k": 1500, "2k-5k": 3500, "5k-10k": 7500, "10k+": 12000 }
-      const emojis: Record<string, string> = { Salário: "💼", Freela: "💻", Aluguel: "🏘️", Outros: "💰" }
+      const emojis: Record<string, string> = { Salário: "💼", Autônomo: "💻", Aluguel: "🏘️", Outros: "💰" }
       const today = new Date().toISOString().split("T")[0]
       await supabase.from("transactions").insert({
         user_id: uid, type: "income", description: incCat,
         amount: valMap[incRange] ?? 1000, date: today, status: "confirmed",
-        category_id: null,
+        category_id: incomeCatIdMap[incCat] ?? null,
         notes: `${emojis[incCat] ?? "💰"}|${incCat}`, tags: [], is_recurring: false,
       })
       setSaving(false)
@@ -283,7 +313,7 @@ export default function OnboardingPage() {
         user_id: uid, type: "expense", description: label,
         amount: valMap[expRange] ?? 50, date: today,
         account_id: accs?.[0]?.id ?? null, status: "confirmed",
-        category_id: null,
+        category_id: expenseCatIdMap[expCat] ?? null,
         notes: `${emoji}|${label}`, tags: [], is_recurring: false,
       })
       setSaving(false)
@@ -465,6 +495,7 @@ export default function OnboardingPage() {
               </div>
 
               <div className="p-5 space-y-4">
+                <BackBtn onClick={goBack} />
                 <StepTitle emoji="🏦" title="Onde fica seu dinheiro?"
                   desc="Na aba Contas você vê o saldo de tudo num lugar só — banco, poupança, carteira. O app soma automaticamente e mostra quanto você tem disponível." />
 
@@ -546,6 +577,7 @@ export default function OnboardingPage() {
               </div>
 
               <div className="p-5 space-y-4">
+                <BackBtn onClick={goBack} />
                 <StepTitle emoji="💳" title="Você usa cartão de crédito?"
                   desc="Se sim, o app acompanha seus gastos no cartão separado do saldo da conta. Toda vez que você gastar no cartão, registra aqui. Na virada do mês, aparece um botão para pagar a fatura." />
 
@@ -643,12 +675,13 @@ export default function OnboardingPage() {
               </div>
 
               <div className="p-5 space-y-4">
+                <BackBtn onClick={goBack} />
                 <StepTitle emoji="➕" title="O coração do app: o botão +"
                   desc="Sempre que gastar ou receber dinheiro, você usa esse botão roxo no centro da tela. Simples assim — menos de 10 segundos por lançamento!" />
 
                 <div className="space-y-2">
                   {[
-                    ["💚", "Aba verde → dinheiro que entrou (salário, freela, Pix recebido...)"],
+                    ["💚", "Aba verde → dinheiro que entrou (salário, renda autônoma, Pix recebido...)"],
                     ["🔴", "Aba vermelha → dinheiro que saiu (compra, conta, transferência...)"],
                     ["📅", "Dá pra registrar datas passadas também — não precisa ser agora"],
                   ].map(([e, t]) => (
@@ -702,6 +735,7 @@ export default function OnboardingPage() {
               </div>
 
               <div className="p-5 space-y-4">
+                <BackBtn onClick={goBack} />
                 <StepTitle emoji="💚" title="De onde vem seu dinheiro?"
                   desc="Vamos registrar sua principal entrada de renda do mês. Isso ajuda o app a calcular quanto você tem livre para gastar — a famosa &quot;grana disponível&quot;." />
 
@@ -757,7 +791,7 @@ export default function OnboardingPage() {
                       <span className="text-[10px] font-black text-red-700">🔴 Aba VERMELHA — selecionada</span>
                     </div>
                     <div className="grid grid-cols-3 gap-1">
-                      {["🍔","🛒","🚗","🏠","💊","🎮"].map(e => (
+                      {["🍔","🛒","🚗","🏠","💊","🐾"].map(e => (
                         <div key={e} className="h-8 rounded-xl bg-red-50 border border-red-200 flex items-center justify-center text-base">{e}</div>
                       ))}
                     </div>
@@ -772,6 +806,7 @@ export default function OnboardingPage() {
               </div>
 
               <div className="p-5 space-y-4">
+                <BackBtn onClick={goBack} />
                 <StepTitle emoji="🔴" title="Vamos registrar um gasto?"
                   desc="Pensa em algo que você gastou hoje ou essa semana. Pode ser qualquer coisa — um café, gasolina, mercado. Não precisa ser exato, pode ser uma estimativa!" />
 
@@ -842,6 +877,7 @@ export default function OnboardingPage() {
               </div>
 
               <div className="p-5 space-y-4">
+                <BackBtn onClick={goBack} />
                 <StepTitle emoji="🎯" title="Defina um teto de gastos"
                   desc='Na aba Planejar você diz: "quero gastar no máximo R$ 500 por mês com comida". O app mostra uma barrinha e te avisa quando estiver chegando no limite — sem sustos no fim do mês!' />
 
@@ -910,6 +946,7 @@ export default function OnboardingPage() {
               </div>
 
               <div className="p-5 space-y-4">
+                <BackBtn onClick={goBack} />
                 <StepTitle emoji="✨" title="Qual é o seu sonho?"
                   desc="Tem algo que você quer comprar, guardar ou realizar? O app calcula quanto você precisa guardar por mês pra chegar lá — e vai mostrando o progresso!" />
 

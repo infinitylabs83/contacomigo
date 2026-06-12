@@ -22,7 +22,7 @@ const EXPENSE_CATS = [
 
 const INCOME_CATS = [
   { id: "cat-salary",        emoji: "💼", label: "Salário",    hint: "salário mensal, 13º, férias",               color: "#10B981" },
-  { id: "cat-freelance",     emoji: "💻", label: "Freela",     hint: "projeto avulso, consultoria, bico",         color: "#6366F1" },
+  { id: "cat-freelance",     emoji: "💻", label: "Autônomo",   hint: "projeto avulso, consultoria, bico, freela",  color: "#6366F1" },
   { id: "cat-rent-in",       emoji: "🏘️", label: "Aluguel",    hint: "aluguel recebido de imóvel",                color: "#F97316" },
   { id: "cat-investment",    emoji: "📈", label: "Rendimento", hint: "rendimento de poupança, CDB, fundo",        color: "#0EA5E9" },
   { id: "cat-dividends",     emoji: "📊", label: "Dividendos", hint: "dividendos de ações, FIIs",                 color: "#8B5CF6" },

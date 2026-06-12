@@ -752,7 +752,8 @@ export default function TransactionsPage() {
               <Tooltip
                 formatter={(v: unknown, name: unknown) => {
                   const cat = allCategories.find((c: any) => c.id === String(name))
-                  return [formatCurrency(Number(v)), `${CAT_EMOJI[String(name)] ?? "💸"} ${cat?.name ?? String(name)}`]
+                  const label = String(name) === "__none__" ? "Outros" : (cat?.name ?? String(name))
+                  return [formatCurrency(Number(v)), `${CAT_EMOJI[String(name)] ?? "💸"} ${label}`]
                 }}
                 labelFormatter={(_: unknown, payload: readonly any[]) => {
                   if (payload?.[0]) { const r = payload[0].payload as any; return `${r.day}, ${r.dayNum}/${r.month}` }
@@ -778,7 +779,7 @@ export default function TransactionsPage() {
             return (
               <div key={c.id} className="flex items-center gap-1.5 text-xs">
                 <div className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: CAT_COLOR[c.id] ?? "#6b7280" }} />
-                <span className="text-muted-foreground truncate">{CAT_EMOJI[c.id] ?? "💸"} {cat?.name ?? c.id}</span>
+                <span className="text-muted-foreground truncate">{CAT_EMOJI[c.id] ?? "💸"} {c.id === "__none__" ? "Outros" : (cat?.name ?? c.id)}</span>
                 <span className="font-bold ml-auto shrink-0">{pct}%</span>
               </div>
             )

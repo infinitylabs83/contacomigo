@@ -696,6 +696,8 @@ function DebtProjection({ debt, onClose, onEdit }: { debt: any; onClose: () => v
     ? new Date(now.getFullYear(), now.getMonth() + rows.length, 1).toLocaleDateString("pt-BR", { month: "long", year: "numeric" })
     : "—"
 
+  const noPayment = payment <= 0
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       className="fixed inset-0 z-50 flex items-end lg:items-center justify-center bg-black/50 backdrop-blur-sm p-4"
@@ -715,40 +717,58 @@ function DebtProjection({ debt, onClose, onEdit }: { debt: any; onClose: () => v
         </div>
 
         <div className="p-5 space-y-4">
-          {/* Summary cards */}
-          <div className="grid grid-cols-3 gap-2 text-center">
-            <div className="rounded-2xl bg-muted/50 p-3">
-              <p className="text-[10px] text-muted-foreground mb-1">Parcelas restantes</p>
-              <p className="font-black text-lg">{rows.length}</p>
+          {noPayment ? (
+            <div className="text-center py-6 space-y-3">
+              <p className="text-4xl">📋</p>
+              <p className="font-semibold">Projeção indisponível</p>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                Para calcular parcelas e data de quitação, informe o <strong>valor da parcela mensal</strong>.
+              </p>
+              <button
+                onClick={onEdit}
+                className="px-5 py-2.5 rounded-2xl text-white text-sm font-bold"
+                style={{ background: "linear-gradient(135deg,#7c3aed,#6d28d9)" }}>
+                ✏️ Editar dívida
+              </button>
             </div>
-            <div className="rounded-2xl bg-red-50 dark:bg-red-950/20 p-3">
-              <p className="text-[10px] text-muted-foreground mb-1">Total de juros</p>
-              <p className="font-black text-sm text-red-500">{formatCurrency(totalInterest)}</p>
-            </div>
-            <div className="rounded-2xl bg-green-50 dark:bg-green-950/20 p-3">
-              <p className="text-[10px] text-muted-foreground mb-1">Quitação</p>
-              <p className="font-black text-[11px] text-green-600 dark:text-green-400 leading-tight">{payoffDate}</p>
-            </div>
-          </div>
-
-          {/* Amortization table - first 12 months */}
-          <div>
-            <p className="text-xs font-semibold text-muted-foreground mb-2">Projeção mês a mês</p>
-            <div className="space-y-1.5">
-              {rows.slice(0, 24).map(r => (
-                <div key={r.month} className="flex items-center gap-2 text-xs rounded-xl bg-muted/30 px-3 py-2">
-                  <span className="w-10 font-bold text-muted-foreground shrink-0">{r.date}</span>
-                  <div className="flex-1 flex justify-between gap-2">
-                    <span className="text-red-400">-{formatCurrency(r.interest)} juros</span>
-                    <span className="font-semibold">{formatCurrency(r.balance)} restante</span>
-                  </div>
+          ) : (
+            <>
+              {/* Summary cards */}
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="rounded-2xl bg-muted/50 p-3">
+                  <p className="text-[10px] text-muted-foreground mb-1">Parcelas restantes</p>
+                  <p className="font-black text-lg">{rows.length > 0 ? rows.length : "—"}</p>
                 </div>
-              ))}
-              {rows.length > 24 && (
-                <p className="text-center text-xs text-muted-foreground py-2">... e mais {rows.length - 24} meses</p>
-              )}
-            </div>
-          </div>
+                <div className="rounded-2xl bg-red-50 dark:bg-red-950/20 p-3">
+                  <p className="text-[10px] text-muted-foreground mb-1">Total de juros</p>
+                  <p className="font-black text-sm text-red-500">{formatCurrency(totalInterest)}</p>
+                </div>
+                <div className="rounded-2xl bg-green-50 dark:bg-green-950/20 p-3">
+                  <p className="text-[10px] text-muted-foreground mb-1">Quitação</p>
+                  <p className="font-black text-[11px] text-green-600 dark:text-green-400 leading-tight">{payoffDate}</p>
+                </div>
+              </div>
+
+              {/* Amortization table */}
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground mb-2">Projeção mês a mês</p>
+                <div className="space-y-1.5">
+                  {rows.slice(0, 24).map(r => (
+                    <div key={r.month} className="flex items-center gap-2 text-xs rounded-xl bg-muted/30 px-3 py-2">
+                      <span className="w-10 font-bold text-muted-foreground shrink-0">{r.date}</span>
+                      <div className="flex-1 flex justify-between gap-2">
+                        <span className="text-red-400">-{formatCurrency(r.interest)} juros</span>
+                        <span className="font-semibold">{formatCurrency(r.balance)} restante</span>
+                      </div>
+                    </div>
+                  ))}
+                  {rows.length > 24 && (
+                    <p className="text-center text-xs text-muted-foreground py-2">... e mais {rows.length - 24} meses</p>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </motion.div>
     </motion.div>

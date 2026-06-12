@@ -171,7 +171,7 @@ function AccountSheet({ account, onClose, onSave, onDelete }: AccountSheetProps)
 
 // ─── sub-views ────────────────────────────────────────────────────────────────
 
-function TabContas({ accounts, onEdit, onAdd }: { accounts: Account[]; onEdit: (a: Account) => void; onAdd: () => void }) {
+function TabContas({ accounts, onEdit, onAdd, onDelete }: { accounts: Account[]; onEdit: (a: Account) => void; onAdd: () => void; onDelete: (id: string) => void }) {
   const active = accounts.filter(a => a.is_active)
   const totalBalance = active.reduce((s, a) => s + a.current_balance, 0)
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
@@ -221,7 +221,8 @@ function TabContas({ accounts, onEdit, onAdd }: { accounts: Account[]; onEdit: (
                           className="flex items-center gap-2 w-full px-4 py-3 text-sm hover:bg-muted text-left">
                           <Pencil className="size-3.5 text-muted-foreground" />Editar
                         </button>
-                        <button className="flex items-center gap-2 w-full px-4 py-3 text-sm hover:bg-red-50 text-red-500 text-left">
+                        <button onClick={() => { onDelete(account.id); setMenuOpen(null) }}
+                          className="flex items-center gap-2 w-full px-4 py-3 text-sm hover:bg-red-50 text-red-500 text-left">
                           <Trash2 className="size-3.5" />Excluir
                         </button>
                       </motion.div>
@@ -1279,11 +1280,15 @@ export default function AccountsPage() {
     setSheet(null)
   }
 
+  async function handleDeleteById(id: string) {
+    const supabase = createClient()
+    await supabase.from("accounts").delete().eq("id", id)
+    setAccounts(prev => prev.filter(a => a.id !== id))
+  }
+
   async function handleDelete() {
     if (sheet && typeof sheet === "object") {
-      const supabase = createClient()
-      await supabase.from("accounts").delete().eq("id", (sheet as Account).id)
-      setAccounts(prev => prev.filter(a => a.id !== (sheet as Account).id))
+      await handleDeleteById((sheet as Account).id)
       setSheet(null)
     }
   }
@@ -1321,7 +1326,7 @@ export default function AccountsPage() {
         ))}
       </div>
 
-      {tab === "contas"  && <TabContas accounts={accounts} onEdit={setSheet} onAdd={() => setSheet("add")} />}
+      {tab === "contas"  && <TabContas accounts={accounts} onEdit={setSheet} onAdd={() => setSheet("add")} onDelete={handleDeleteById} />}
       {tab === "cartoes" && <TabCartoes userId={userId} />}
       {tab === "devo"    && <TabDevo userId={userId} />}
       {tab === "assino"  && <TabAssino userId={userId} />}

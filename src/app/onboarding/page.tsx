@@ -74,11 +74,11 @@ function RangeSelector({ label, options, value, onChange }: {
 }) {
   return (
     <div>
-      <p className="text-xs font-semibold text-muted-foreground mb-2">{label}</p>
-      <div className="grid grid-cols-2 gap-1.5">
+      <p className="text-sm font-semibold text-muted-foreground mb-2">{label}</p>
+      <div className="grid grid-cols-2 gap-2">
         {options.map(o => (
           <button key={o.value} onClick={() => onChange(o.value)}
-            className={`py-2 px-3 rounded-xl border-2 text-xs font-semibold transition-all text-left ${
+            className={`py-2.5 px-3 rounded-xl border-2 text-sm font-semibold transition-all text-left ${
               value === o.value
                 ? "border-primary bg-primary/8 text-primary"
                 : "border-border/50 bg-muted/30 text-muted-foreground"
@@ -105,7 +105,7 @@ function PrimaryBtn({ onClick, disabled, loading, children }: {
 
 function SkipBtn({ onSkip }: { onSkip: () => void }) {
   return (
-    <button onClick={onSkip} className="w-full text-center text-xs text-muted-foreground py-1 hover:text-foreground transition-colors">
+    <button onClick={onSkip} className="w-full text-center text-sm text-muted-foreground py-1.5 hover:text-foreground transition-colors">
       Pular por agora →
     </button>
   )
@@ -114,11 +114,11 @@ function SkipBtn({ onSkip }: { onSkip: () => void }) {
 function StepTitle({ emoji, title, desc }: { emoji: string; title: string; desc: string }) {
   return (
     <div>
-      <div className="flex items-center gap-2 mb-1">
+      <div className="flex items-center gap-2 mb-1.5">
         <span className="text-2xl">{emoji}</span>
-        <h2 className="text-lg font-black leading-tight">{title}</h2>
+        <h2 className="text-xl font-black leading-tight">{title}</h2>
       </div>
-      <p className="text-sm text-muted-foreground leading-relaxed">{desc}</p>
+      <p className="text-base text-muted-foreground leading-relaxed">{desc}</p>
     </div>
   )
 }
@@ -253,12 +253,15 @@ export default function OnboardingPage() {
     if (!skip && incRange) {
       setSaving(true)
       const supabase = createClient()
+      const { data: { user: u } } = await supabase.auth.getUser()
+      const uid = u?.id ?? userId
       const valMap: Record<string, number> = { "ate-2k": 1500, "2k-5k": 3500, "5k-10k": 7500, "10k+": 12000 }
       const emojis: Record<string, string> = { Salário: "💼", Freela: "💻", Aluguel: "🏘️", Outros: "💰" }
       const today = new Date().toISOString().split("T")[0]
       await supabase.from("transactions").insert({
-        user_id: userId, type: "income", description: incCat,
+        user_id: uid, type: "income", description: incCat,
         amount: valMap[incRange] ?? 1000, date: today, status: "confirmed",
+        category_id: null,
         notes: `${emojis[incCat] ?? "💰"}|${incCat}`, tags: [], is_recurring: false,
       })
       setSaving(false)
@@ -270,14 +273,17 @@ export default function OnboardingPage() {
     if (!skip && expRange) {
       setSaving(true)
       const supabase = createClient()
+      const { data: { user: u } } = await supabase.auth.getUser()
+      const uid = u?.id ?? userId
       const valMap: Record<string, number> = { "ate-50": 30, "50-200": 100, "200-500": 300, "500+": 700 }
       const today = new Date().toISOString().split("T")[0]
       const [emoji, label] = expCat.split("|")
-      const { data: accs } = await supabase.from("accounts").select("id").eq("user_id", userId).eq("is_active", true).limit(1)
+      const { data: accs } = await supabase.from("accounts").select("id").eq("is_active", true).limit(1)
       await supabase.from("transactions").insert({
-        user_id: userId, type: "expense", description: label,
+        user_id: uid, type: "expense", description: label,
         amount: valMap[expRange] ?? 50, date: today,
         account_id: accs?.[0]?.id ?? null, status: "confirmed",
+        category_id: null,
         notes: `${emoji}|${label}`, tags: [], is_recurring: false,
       })
       setSaving(false)
@@ -450,11 +456,11 @@ export default function OnboardingPage() {
                   desc="Na aba Contas você vê o saldo de tudo num lugar só — banco, poupança, carteira. O app soma automaticamente e mostra quanto você tem disponível." />
 
                 <div>
-                  <p className="text-xs font-semibold text-muted-foreground mb-2">Que tipo de conta você usa mais?</p>
+                  <p className="text-sm font-semibold text-muted-foreground mb-2">Que tipo de conta você usa mais?</p>
                   <div className="grid grid-cols-3 gap-1.5">
                     {accTypes.map(({ id, Icon, label }) => (
                       <button key={id} onClick={() => setAccType(id)}
-                        className={`flex flex-col items-center gap-1 p-2.5 rounded-2xl border-2 text-[10px] font-semibold transition-all ${accType === id ? "border-primary bg-primary/8 text-primary" : "border-border/50 bg-muted/30 text-muted-foreground"}`}>
+                        className={`flex flex-col items-center gap-1 p-2.5 rounded-2xl border-2 text-xs font-semibold transition-all ${accType === id ? "border-primary bg-primary/8 text-primary" : "border-border/50 bg-muted/30 text-muted-foreground"}`}>
                         <Icon className="size-5" />
                         {label}
                       </button>
@@ -463,7 +469,7 @@ export default function OnboardingPage() {
                 </div>
 
                 <div>
-                  <p className="text-xs font-semibold text-muted-foreground mb-2">Como você chama essa conta?</p>
+                  <p className="text-sm font-semibold text-muted-foreground mb-2">Como você chama essa conta?</p>
                   <input value={accName} onChange={e => setAccName(e.target.value)}
                     placeholder={accType === "wallet" ? "ex: Carteira" : "ex: Nubank, Itaú, Inter..."}
                     className="w-full h-11 rounded-2xl border border-border/60 bg-muted/20 px-4 text-sm font-medium outline-none focus:border-primary transition-colors" />
@@ -480,7 +486,7 @@ export default function OnboardingPage() {
                     { label: "R$ 15k ou mais", value: "15k+" },
                   ]}
                 />
-                <p className="text-[11px] text-muted-foreground text-center -mt-2">
+                <p className="text-xs text-muted-foreground text-center -mt-2">
                   Não precisa ser o valor exato — uma faixa já ajuda o app 😊
                 </p>
 
@@ -531,7 +537,7 @@ export default function OnboardingPage() {
                   desc="Se sim, o app acompanha seus gastos no cartão separado do saldo da conta. Toda vez que você gastar no cartão, registra aqui. Na virada do mês, aparece um botão para pagar a fatura." />
 
                 <div className="bg-blue-50 border border-blue-200 rounded-2xl px-4 py-2.5">
-                  <p className="text-xs text-blue-700 font-medium">
+                  <p className="text-sm text-blue-700 font-medium">
                     💡 <strong>Conta</strong> = dinheiro que você já tem.<br />
                     <strong>Cartão</strong> = dinheiro que você ainda vai pagar.
                   </p>
@@ -551,7 +557,7 @@ export default function OnboardingPage() {
                     <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}
                       exit={{ opacity: 0, height: 0 }} className="space-y-3 overflow-hidden">
                       <div>
-                        <p className="text-xs font-semibold text-muted-foreground mb-2">Qual é o nome do seu cartão?</p>
+                        <p className="text-sm font-semibold text-muted-foreground mb-2">Qual é o nome do seu cartão?</p>
                         <input value={cardName} onChange={e => setCardName(e.target.value)}
                           placeholder="ex: Nubank, Itaú Platinum, C6..."
                           className="w-full h-11 rounded-2xl border border-border/60 bg-muted/20 px-4 text-sm font-medium outline-none focus:border-primary transition-colors" />
@@ -567,7 +573,7 @@ export default function OnboardingPage() {
                           { label: "R$ 10k ou mais", value: "10k+" },
                         ]}
                       />
-                      <p className="text-[11px] text-muted-foreground text-center">
+                      <p className="text-xs text-muted-foreground text-center">
                         🔒 Não pedimos número do cartão nem dados do banco. Isso fica só aqui!
                       </p>
                     </motion.div>
@@ -687,11 +693,11 @@ export default function OnboardingPage() {
                   desc="Vamos registrar sua principal entrada de renda do mês. Isso ajuda o app a calcular quanto você tem livre para gastar — a famosa &quot;grana disponível&quot;." />
 
                 <div>
-                  <p className="text-xs font-semibold text-muted-foreground mb-2">Qual é o tipo da sua renda principal?</p>
+                  <p className="text-sm font-semibold text-muted-foreground mb-2">Qual é o tipo da sua renda principal?</p>
                   <div className="grid grid-cols-2 gap-1.5">
                     {incomeCategories.map(c => (
                       <button key={c.id} onClick={() => setIncCat(c.id)}
-                        className={`flex items-center gap-2 p-2.5 rounded-2xl border-2 text-xs font-semibold transition-all ${incCat === c.id ? "border-green-400 bg-green-50 text-green-700" : "border-border/50 bg-muted/30 text-muted-foreground"}`}>
+                        className={`flex items-center gap-2 p-3 rounded-2xl border-2 text-sm font-semibold transition-all ${incCat === c.id ? "border-green-400 bg-green-50 text-green-700" : "border-border/50 bg-muted/30 text-muted-foreground"}`}>
                         <span className="text-xl">{c.emoji}</span>{c.id}
                       </button>
                     ))}
@@ -709,7 +715,7 @@ export default function OnboardingPage() {
                     { label: "R$ 10k ou mais", value: "10k+" },
                   ]}
                 />
-                <p className="text-[11px] text-muted-foreground text-center -mt-2">
+                <p className="text-xs text-muted-foreground text-center -mt-2">
                   🔒 Só você vê isso. Uma estimativa já ajuda bastante!
                 </p>
 
@@ -757,11 +763,11 @@ export default function OnboardingPage() {
                   desc="Pensa em algo que você gastou hoje ou essa semana. Pode ser qualquer coisa — um café, gasolina, mercado. Não precisa ser exato, pode ser uma estimativa!" />
 
                 <div>
-                  <p className="text-xs font-semibold text-muted-foreground mb-2">Que tipo de gasto foi?</p>
+                  <p className="text-sm font-semibold text-muted-foreground mb-2">Que tipo de gasto foi?</p>
                   <div className="grid grid-cols-3 gap-1.5">
                     {expenseCategories.map(c => (
                       <button key={c.id} onClick={() => setExpCat(c.id)}
-                        className={`flex flex-col items-center gap-1 p-2 rounded-2xl border-2 text-[10px] font-semibold transition-all ${expCat === c.id ? "border-primary bg-primary/8 text-primary" : "border-border/50 bg-muted/30 text-muted-foreground"}`}>
+                        className={`flex flex-col items-center gap-1 p-2.5 rounded-2xl border-2 text-xs font-semibold transition-all ${expCat === c.id ? "border-primary bg-primary/8 text-primary" : "border-border/50 bg-muted/30 text-muted-foreground"}`}>
                         <span className="text-xl">{c.emoji}</span>{c.label}
                       </button>
                     ))}
@@ -827,11 +833,11 @@ export default function OnboardingPage() {
                   desc='Na aba Planejar você diz: "quero gastar no máximo R$ 500 por mês com comida". O app mostra uma barrinha e te avisa quando estiver chegando no limite — sem sustos no fim do mês!' />
 
                 <div>
-                  <p className="text-xs font-semibold text-muted-foreground mb-2">Em qual área você quer controlar primeiro?</p>
+                  <p className="text-sm font-semibold text-muted-foreground mb-2">Em qual área você quer controlar primeiro?</p>
                   <div className="grid grid-cols-4 gap-1.5">
                     {budgetCategories.map(c => (
                       <button key={c.id} onClick={() => setBudCat(c.id)}
-                        className={`flex flex-col items-center gap-0.5 p-2 rounded-2xl border-2 text-[9px] font-semibold transition-all ${budCat === c.id ? "border-primary bg-primary/8 text-primary" : "border-border/50 bg-muted/30 text-muted-foreground"}`}>
+                        className={`flex flex-col items-center gap-0.5 p-2 rounded-2xl border-2 text-[10px] font-semibold transition-all ${budCat === c.id ? "border-primary bg-primary/8 text-primary" : "border-border/50 bg-muted/30 text-muted-foreground"}`}>
                         <span className="text-lg">{c.emoji}</span>{c.label}
                       </button>
                     ))}
@@ -895,11 +901,11 @@ export default function OnboardingPage() {
                   desc="Tem algo que você quer comprar, guardar ou realizar? O app calcula quanto você precisa guardar por mês pra chegar lá — e vai mostrando o progresso!" />
 
                 <div>
-                  <p className="text-xs font-semibold text-muted-foreground mb-2">O que você quer conquistar?</p>
+                  <p className="text-sm font-semibold text-muted-foreground mb-2">O que você quer conquistar?</p>
                   <div className="grid grid-cols-4 gap-1.5">
                     {goalOptions.map(({ emoji, label }) => (
                       <button key={label} onClick={() => setGoalName(label)}
-                        className={`flex flex-col items-center gap-0.5 p-2 rounded-2xl border-2 text-[9px] font-semibold transition-all ${goalName === label ? "border-amber-400 bg-amber-50 text-amber-700" : "border-border/50 bg-muted/30 text-muted-foreground"}`}>
+                        className={`flex flex-col items-center gap-0.5 p-2 rounded-2xl border-2 text-[10px] font-semibold transition-all ${goalName === label ? "border-amber-400 bg-amber-50 text-amber-700" : "border-border/50 bg-muted/30 text-muted-foreground"}`}>
                         <span className="text-xl">{emoji}</span>{label}
                       </button>
                     ))}

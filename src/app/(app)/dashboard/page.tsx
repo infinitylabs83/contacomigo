@@ -16,7 +16,13 @@ export default async function DashboardPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return redirect("/login")
-  if (!user.user_metadata?.onboarding_done) return redirect("/onboarding")
+  if (!user.user_metadata?.onboarding_done) {
+    // Only redirect to onboarding if user truly has no data yet
+    const { count } = await supabase
+      .from("accounts")
+      .select("id", { count: "exact", head: true })
+    if ((count ?? 0) === 0) return redirect("/onboarding")
+  }
 
   // Busca dados — cada query independente com fallback
   const now   = new Date()

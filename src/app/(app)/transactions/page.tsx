@@ -572,7 +572,7 @@ export default function TransactionsPage() {
   const fetchData = () => {
     const supabase = createClient()
     Promise.all([
-      supabase.from("transactions").select("*").order("date", { ascending: false }),
+      supabase.from("transactions").select("*").order("date", { ascending: false }).order("created_at", { ascending: false }),
       supabase.from("categories").select("*"),
       supabase.from("accounts").select("*"),
       supabase.from("credit_cards").select("*"),
@@ -622,7 +622,11 @@ export default function TransactionsPage() {
       return t.type === (filter as TransactionType)
     })
     .filter(t => t.description.toLowerCase().includes(search.toLowerCase()))
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .sort((a, b) => {
+      const dateDiff = new Date(b.date).getTime() - new Date(a.date).getTime()
+      if (dateDiff !== 0) return dateDiff
+      return new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime()
+    })
 
   const transactions = filteredTransactions.slice(0, visibleCount)
   const hasMore = filteredTransactions.length > visibleCount

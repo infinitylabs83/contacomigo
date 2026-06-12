@@ -158,6 +158,7 @@ export function QuickAdd() {
         date:                txDate,
         account_id:          resolvedAccountId,
         status:              "confirmed",
+        category_id:         selectedCat?.id ?? null,
         notes:               selectedCat ? `${selectedCat.emoji}|${selectedCat.label}` : null,
         tags:                [],
         is_recurring:        isRecurring,
@@ -176,6 +177,19 @@ export function QuickAdd() {
         setSaveError(`Erro: ${error.message || error.details || "falha ao salvar"}`)
         setSaving(false)
         return
+      }
+
+      // Update account current_balance for cash transactions
+      if (resolvedAccountId && payMethod === "cash") {
+        const delta = mode === "income" ? parsed : -parsed
+        const { data: accData } = await supabase
+          .from("accounts").select("current_balance").eq("id", resolvedAccountId).single()
+        if (accData) {
+          await supabase
+            .from("accounts")
+            .update({ current_balance: (accData.current_balance ?? 0) + delta })
+            .eq("id", resolvedAccountId)
+        }
       }
 
       window.dispatchEvent(new CustomEvent("transaction-added"))

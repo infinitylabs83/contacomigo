@@ -2,6 +2,7 @@ import { TopNav } from "./top-nav"
 import { Header } from "./header"
 import { MobileNav } from "./mobile-nav"
 import { QuickAdd } from "./quick-add"
+import { RefreshOnTransaction } from "./refresh-on-transaction"
 
 interface AppLayoutProps {
   children: React.ReactNode
@@ -20,6 +21,7 @@ export function AppLayout({ children, title }: AppLayoutProps) {
       </main>
       <MobileNav />
       <QuickAdd />
+      <RefreshOnTransaction />
     </div>
   )
 }

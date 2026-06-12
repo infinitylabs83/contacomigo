@@ -333,9 +333,22 @@ export default function OnboardingPage() {
   const progress = ((step - 1) / (TOTAL_STEPS - 1)) * 100
   const budCatLabel = budCat.split("|")[1] ?? budCat
 
+  async function handleSignOut() {
+    await createClient().auth.signOut()
+    router.replace("/login")
+  }
+
   return (
     <div className="min-h-screen flex flex-col items-center bg-gradient-to-b from-primary/5 to-background px-4 py-6 overflow-y-auto">
       <div className="w-full max-w-md space-y-4 pb-8">
+
+        {/* Botão sair — sempre visível no topo */}
+        <div className="flex justify-end">
+          <button onClick={handleSignOut}
+            className="text-xs text-muted-foreground hover:text-red-500 transition-colors px-3 py-1.5 rounded-xl hover:bg-red-50 border border-transparent hover:border-red-200">
+            Sair da conta →
+          </button>
+        </div>
 
         {/* Flash de pontos */}
         <AnimatePresence>

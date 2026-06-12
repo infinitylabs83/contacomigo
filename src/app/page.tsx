@@ -229,7 +229,7 @@ export default function LandingPage() {
               </>
             ) : (
               <>
-                <Link href="/login" className="px-3 py-2 rounded-lg text-sm font-medium transition-colors" style={{ color: C.muted }}>Entrar</Link>
+                <Link href="/login?logout=1" className="px-3 py-2 rounded-lg text-sm font-medium transition-colors" style={{ color: C.muted }}>Entrar</Link>
                 <Link href="/register" className="px-4 py-2 rounded-xl text-sm font-bold text-white"
                   style={{ background: `linear-gradient(135deg,${C.primary},${C.primaryD})` }}>
                   Acesso grátis

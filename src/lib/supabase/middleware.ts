@@ -53,8 +53,12 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
+  // Allow /login?logout=1 to pass through so the login page can sign out first
+  const wantsLogout = request.nextUrl.searchParams.get("logout") === "1"
+
   if (
     user &&
+    !wantsLogout &&
     (request.nextUrl.pathname === "/login" ||
       request.nextUrl.pathname === "/register")
   ) {

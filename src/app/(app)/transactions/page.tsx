@@ -567,6 +567,7 @@ export default function TransactionsPage() {
   const [allCards, setAllCards]               = useState<CreditCard[]>([])
   const [loading, setLoading]                 = useState(true)
   const [editingTx, setEditingTx]             = useState<Transaction | null>(null)
+  const [visibleCount, setVisibleCount]       = useState(25)
 
   const fetchData = () => {
     const supabase = createClient()
@@ -613,7 +614,7 @@ export default function TransactionsPage() {
   const accountMap  = Object.fromEntries(allAccounts.map(a => [a.id, a]))
   const cardMap     = Object.fromEntries(allCards.map(c => [c.id, c]))
 
-  const transactions = allTransactions
+  const filteredTransactions = allTransactions
     .filter(t => {
       if (filter === "credit")    return !!t.card_id
       if (filter === "recurring") return t.is_recurring
@@ -622,6 +623,9 @@ export default function TransactionsPage() {
     })
     .filter(t => t.description.toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+
+  const transactions = filteredTransactions.slice(0, visibleCount)
+  const hasMore = filteredTransactions.length > visibleCount
 
   function jumpToWeek(date: Date) {
     const today = new Date(); today.setHours(0,0,0,0)
@@ -849,7 +853,7 @@ export default function TransactionsPage() {
           </div>
           <div className="flex gap-2 flex-wrap">
             {FILTERS.map(({ key, label }) => (
-              <button key={key} onClick={() => setFilter(key)}
+              <button key={key} onClick={() => { setFilter(key); setVisibleCount(25) }}
                 className={`px-4 py-2 rounded-2xl text-sm font-semibold transition-all ${
                   filter === key ? "text-white" : "bg-muted/60 text-muted-foreground hover:bg-muted"
                 }`}
@@ -859,66 +863,90 @@ export default function TransactionsPage() {
           </div>
         </div>
 
-        <AnimatePresence>
-          {transactions.map((t, i) => {
-            const cat      = categoryMap[t.category_id]
-            const acc      = accountMap[t.account_id]
-            const card     = t.card_id ? cardMap[t.card_id] : null
-            const isIncome = t.type === "income"
-
-            // Category from DB or from notes field (saved by QuickAdd as "emoji|label")
-            const notesParts  = t.notes?.includes("|") ? t.notes.split("|") : null
-            const catEmoji    = cat ? (CAT_EMOJI[t.category_id] ?? "💸") : (notesParts?.[0] ?? (t.type === "income" ? "💚" : "💸"))
-            const catLabel    = cat?.name ?? notesParts?.[1] ?? null
-            const iconBg      = cat?.color ? `${cat.color}18` : isIncome ? "#10b98118" : "#7c3aed18"
-
-            return (
-              <motion.div key={t.id}
-                initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 8 }}
-                transition={{ delay: i * 0.03 }}
-                className="rounded-2xl border bg-card p-4 flex items-center gap-3 cursor-pointer hover:border-primary/40 hover:bg-primary/[0.02] transition-colors active:scale-[0.99]"
-                onClick={() => setEditingTx(t as any)}
-              >
-                <div className="w-11 h-11 rounded-2xl flex items-center justify-center text-xl shrink-0"
-                     style={{ backgroundColor: iconBg }}>{catEmoji}</div>
-                <div className="flex-1 min-w-0">
-                  {catLabel ? (
-                    <>
-                      <p className="text-sm font-semibold truncate">{catLabel}</p>
-                      {t.description && t.description !== catLabel && (
-                        <p className="text-xs text-muted-foreground truncate">{t.description}</p>
-                      )}
-                    </>
-                  ) : (
-                    <p className="text-sm font-semibold truncate">{t.description}</p>
-                  )}
-                  <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                    <span className="text-xs text-muted-foreground">{formatDate(t.date, "short")}</span>
-                    {card && <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold" style={{ background: "#7c3aed18", color: "#7c3aed" }}>💳 {card.name}</span>}
-                    {t.is_recurring && <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">🔁 fixo</span>}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="text-right shrink-0">
-                    <p className={`text-sm font-bold ${isIncome ? "text-green-600 dark:text-green-400" : card ? "text-purple-600 dark:text-purple-400" : "text-foreground"}`}>
-                      {isIncome ? "+" : "-"}{formatCurrency(t.amount)}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {card ? "fatura" : acc ? acc.name.split(" ")[0] : ""}
-                    </p>
-                  </div>
-                  <Pencil className="size-3.5 text-muted-foreground/50 shrink-0" />
-                </div>
-              </motion.div>
-            )
-          })}
-        </AnimatePresence>
-
-        {transactions.length === 0 && (
+        {transactions.length === 0 ? (
           <div className="text-center py-10 text-muted-foreground text-sm">
             Nenhuma movimentação encontrada
           </div>
-        )}
+        ) : (() => {
+          const todayStr     = new Date().toISOString().slice(0, 10)
+          const yesterdayStr = new Date(Date.now() - 86400000).toISOString().slice(0, 10)
+          let lastDateLabel  = ""
+
+          return (
+            <>
+              <AnimatePresence>
+                {transactions.map((t, i) => {
+                  const cat      = categoryMap[t.category_id]
+                  const acc      = accountMap[t.account_id]
+                  const card     = t.card_id ? cardMap[t.card_id] : null
+                  const isIncome = t.type === "income"
+                  const notesParts = t.notes?.includes("|") ? t.notes.split("|") : null
+                  const catEmoji   = cat ? (CAT_EMOJI[t.category_id] ?? "💸") : (notesParts?.[0] ?? (t.type === "income" ? "💚" : "💸"))
+                  const catLabel   = cat?.name ?? notesParts?.[1] ?? null
+                  const iconBg     = cat?.color ? `${cat.color}18` : isIncome ? "#10b98118" : "#7c3aed18"
+
+                  const dateLabel = t.date === todayStr ? "Hoje"
+                    : t.date === yesterdayStr ? "Ontem"
+                    : new Date(t.date + "T12:00:00").toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" })
+
+                  const showHeader = dateLabel !== lastDateLabel
+                  if (showHeader) lastDateLabel = dateLabel
+
+                  return (
+                    <div key={t.id}>
+                      {showHeader && (
+                        <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide pt-2 pb-1 px-1 capitalize">
+                          {dateLabel}
+                        </p>
+                      )}
+                      <motion.div
+                        initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 8 }}
+                        transition={{ delay: Math.min(i * 0.02, 0.3) }}
+                        className="rounded-2xl border bg-card p-4 flex items-center gap-3 cursor-pointer hover:border-primary/40 hover:bg-primary/[0.02] transition-colors active:scale-[0.99]"
+                        onClick={() => setEditingTx(t as any)}
+                      >
+                        <div className="w-11 h-11 rounded-2xl flex items-center justify-center text-xl shrink-0"
+                             style={{ backgroundColor: iconBg }}>{catEmoji}</div>
+                        <div className="flex-1 min-w-0">
+                          {catLabel ? (
+                            <>
+                              <p className="text-sm font-semibold truncate">{catLabel}</p>
+                              {t.description && t.description !== catLabel && (
+                                <p className="text-xs text-muted-foreground truncate">{t.description}</p>
+                              )}
+                            </>
+                          ) : (
+                            <p className="text-sm font-semibold truncate">{t.description}</p>
+                          )}
+                          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                            {card && <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold" style={{ background: "#7c3aed18", color: "#7c3aed" }}>💳 {card.name}</span>}
+                            {t.is_recurring && <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">🔁 fixo</span>}
+                            {acc && !card && <span className="text-[10px] text-muted-foreground">{acc.name.split(" ")[0]}</span>}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <p className={`text-sm font-bold shrink-0 ${isIncome ? "text-green-600 dark:text-green-400" : card ? "text-purple-600 dark:text-purple-400" : "text-foreground"}`}>
+                            {isIncome ? "+" : "-"}{formatCurrency(t.amount)}
+                          </p>
+                          <Pencil className="size-3.5 text-muted-foreground/50 shrink-0" />
+                        </div>
+                      </motion.div>
+                    </div>
+                  )
+                })}
+              </AnimatePresence>
+
+              {hasMore && (
+                <button
+                  onClick={() => setVisibleCount(v => v + 25)}
+                  className="w-full py-3 rounded-2xl border-2 border-dashed border-primary/30 text-primary font-semibold text-sm hover:bg-primary/5 transition-colors">
+                  Ver mais {Math.min(filteredTransactions.length - visibleCount, 25)} lançamentos
+                  <span className="text-muted-foreground font-normal ml-1">({filteredTransactions.length - visibleCount} restantes)</span>
+                </button>
+              )}
+            </>
+          )
+        })()}
       </div>
 
       {/* Edit sheet */}

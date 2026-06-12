@@ -9,11 +9,8 @@ import {
   CheckCircle, X, ChevronDown, ChevronUp,
   ArrowRight, Check, Shield, Smartphone, TrendingUp, Gift, Zap,
 } from "lucide-react"
-import { Syne } from "next/font/google"
 import { ButtonLink } from "@/components/ui/button-link"
 import { createClient } from "@/lib/supabase/client"
-
-const syne = Syne({ subsets: ["latin"], weight: ["700", "800"] })
 
 // Cores fixas — nunca mudam com dark mode
 const C = {
@@ -279,7 +276,7 @@ export default function LandingPage() {
 
           <motion.h1 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.1 }}
             className="font-black leading-[1.1] tracking-tight"
-            style={{ fontSize: "clamp(2rem,6vw,3.5rem)", color: C.text, fontFamily: syne.style.fontFamily }}>
+            style={{ fontSize: "clamp(2rem,6vw,3.5rem)", color: C.text }}>
             Para o seu dinheiro,{" "}
             <span style={{ color: C.primary }}>pode contar comigo.</span>
           </motion.h1>
@@ -314,7 +311,7 @@ export default function LandingPage() {
       <section className="py-16" style={{ background: C.section }}>
         <div className="max-w-6xl mx-auto px-4">
           <FadeIn className="text-center mb-10">
-            <h2 className="text-3xl font-black mb-3" style={{ color: C.text, fontFamily: syne.style.fontFamily }}>Você se identifica?</h2>
+            <h2 className="text-3xl font-black mb-3" style={{ color: C.text }}>Você se identifica?</h2>
             <p style={{ color: C.muted, fontSize: 17 }}>Se sim, o Conta Comigo foi feito pra você.</p>
           </FadeIn>
           <div className="grid md:grid-cols-3 gap-5">
@@ -353,7 +350,7 @@ export default function LandingPage() {
       <section id="como-funciona" className="py-16 max-w-6xl mx-auto px-4">
         <FadeIn className="text-center mb-12">
           <span className="text-sm font-semibold uppercase tracking-widest" style={{ color: C.primary }}>Simples assim</span>
-          <h2 className="text-3xl font-black mt-2 mb-3" style={{ color: C.text, fontFamily: syne.style.fontFamily }}>3 passos. Sem complicação.</h2>
+          <h2 className="text-3xl font-black mt-2 mb-3" style={{ color: C.text }}>3 passos. Sem complicação.</h2>
           <p style={{ color: C.muted, fontSize: 17 }}>Do zero à clareza financeira em menos de 5 minutos.</p>
         </FadeIn>
         <div className="grid md:grid-cols-3 gap-8">
@@ -389,7 +386,7 @@ export default function LandingPage() {
       <section className="py-16" style={{ background: C.section }}>
         <div className="max-w-4xl mx-auto px-4">
           <FadeIn className="text-center mb-10">
-            <h2 className="text-3xl font-black mb-3" style={{ color: C.text, fontFamily: syne.style.fontFamily }}>Por que não o app do banco?</h2>
+            <h2 className="text-3xl font-black mb-3" style={{ color: C.text }}>Por que não o app do banco?</h2>
             <p style={{ color: C.muted, fontSize: 17 }}>Seu app bancário mostra o passado. O Conta Comigo cuida do futuro.</p>
           </FadeIn>
           <FadeIn>
@@ -429,7 +426,7 @@ export default function LandingPage() {
         <div className="grid lg:grid-cols-2 gap-12 items-center">
           <FadeIn>
             <span className="text-sm font-semibold uppercase tracking-widest" style={{ color: "#f59e0b" }}>Gamificação</span>
-            <h2 className="text-3xl font-black mt-2 mb-4" style={{ color: C.text, fontFamily: syne.style.fontFamily }}>Finança virou jogo.<br />E você vai querer jogar.</h2>
+            <h2 className="text-3xl font-black mt-2 mb-4" style={{ color: C.text }}>Finança virou jogo.<br />E você vai querer jogar.</h2>
             <p className="mb-6" style={{ color: C.muted, lineHeight: 1.7 }}>
               Cada gasto registrado, cada meta batida e cada semana no azul te dá pontos, sobe seu nível e completa missões. É viciante — e esse é o ponto.
             </p>
@@ -488,7 +485,7 @@ export default function LandingPage() {
       <section id="precos" className="py-16" style={{ background: C.section }}>
         <div className="max-w-3xl mx-auto px-4">
           <FadeIn className="text-center mb-10">
-            <h2 className="text-3xl font-black mb-3" style={{ color: C.text, fontFamily: syne.style.fontFamily }}>Preço honesto. Sem mensalidade.</h2>
+            <h2 className="text-3xl font-black mb-3" style={{ color: C.text }}>Preço honesto. Sem mensalidade.</h2>
             <p style={{ color: C.muted, fontSize: 17 }}>Pague uma vez. Use para sempre.</p>
           </FadeIn>
 
@@ -504,7 +501,7 @@ export default function LandingPage() {
                   style={{ background: "rgba(255,255,255,0.2)" }}>
                   <Gift size={16} /> Período de lançamento
                 </div>
-                <h3 className="text-3xl font-black mb-2" style={{ fontFamily: syne.style.fontFamily }}>Agora é grátis para sempre</h3>
+                <h3 className="text-3xl font-black mb-2" style={{ }}>Agora é grátis para sempre</h3>
                 <p className="text-base mb-6 max-w-sm mx-auto" style={{ color: "rgba(255,255,255,0.75)" }}>
                   Quem se cadastrar durante o lançamento garante acesso vitalício gratuito. Sem cartão, sem cobrança, sem pegadinha.
                 </p>
@@ -565,7 +562,7 @@ export default function LandingPage() {
       <section id="faq" className="py-16">
         <div className="max-w-6xl mx-auto px-4">
           <FadeIn className="text-center mb-10">
-            <h2 className="text-3xl font-black mb-3" style={{ color: C.text, fontFamily: syne.style.fontFamily }}>Dúvidas frequentes</h2>
+            <h2 className="text-3xl font-black mb-3" style={{ color: C.text }}>Dúvidas frequentes</h2>
             <p style={{ color: C.muted }}>Tire suas dúvidas antes de começar.</p>
           </FadeIn>
           <FAQ />
@@ -583,7 +580,7 @@ export default function LandingPage() {
             <div className="absolute bottom-10 right-1/4 w-1.5 h-1.5 rounded-full pointer-events-none" style={{ background: "rgba(255,255,255,0.25)" }} />
             <div className="relative">
               <p className="text-sm font-semibold uppercase tracking-widest mb-3" style={{ color: "rgba(255,255,255,0.7)" }}>Chega de aperto financeiro</p>
-              <h2 className="font-black mb-4 leading-tight" style={{ fontSize: "clamp(1.6rem,4vw,2.5rem)", fontFamily: syne.style.fontFamily }}>
+              <h2 className="font-black mb-4 leading-tight" style={{ fontSize: "clamp(1.6rem,4vw,2.5rem)" }}>
                 Seu dinheiro estava esperando<br />você prestar atenção nele.
               </h2>
               <p className="text-lg mb-8 max-w-xl mx-auto" style={{ color: "rgba(255,255,255,0.75)" }}>

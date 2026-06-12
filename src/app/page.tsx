@@ -9,8 +9,11 @@ import {
   CheckCircle, X, ChevronDown, ChevronUp,
   ArrowRight, Check, Shield, Smartphone, TrendingUp, Gift, Zap,
 } from "lucide-react"
+import { Syne } from "next/font/google"
 import { ButtonLink } from "@/components/ui/button-link"
 import { createClient } from "@/lib/supabase/client"
+
+const syne = Syne({ subsets: ["latin"], weight: ["700", "800"] })
 
 // Cores fixas — nunca mudam com dark mode
 const C = {
@@ -36,14 +39,14 @@ function Logo({ size = 36 }: { size?: number }) {
 }
 
 /* ─── FadeIn ─────────────────────────────────────────────────────────────── */
-function FadeIn({ children, className, delay = 0 }: { children: React.ReactNode; className?: string; delay?: number }) {
+function FadeIn({ children, className, delay = 0, scale = false }: { children: React.ReactNode; className?: string; delay?: number; scale?: boolean }) {
   const ref = useRef(null)
   const inView = useInView(ref, { once: true, margin: "-60px" })
   return (
     <motion.div ref={ref}
-      initial={{ opacity: 0, y: 24 }}
-      animate={inView ? { opacity: 1, y: 0 } : {}}
-      transition={{ duration: 0.55, delay, ease: "easeOut" }}
+      initial={{ opacity: 0, y: 28, scale: scale ? 0.96 : 1 }}
+      animate={inView ? { opacity: 1, y: 0, scale: 1 } : {}}
+      transition={{ duration: 0.6, delay, ease: [0.22, 1, 0.36, 1] }}
       className={className}>
       {children}
     </motion.div>
@@ -53,7 +56,11 @@ function FadeIn({ children, className, delay = 0 }: { children: React.ReactNode;
 /* ─── Phone mockup ───────────────────────────────────────────────────────── */
 function PhoneMockup() {
   return (
-    <div className="relative mx-auto w-[220px] sm:w-[260px]">
+    <motion.div
+      animate={{ y: [0, -10, 0] }}
+      transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+      className="relative mx-auto w-[220px] sm:w-[260px]"
+    >
       <div className="absolute inset-0 scale-110 blur-3xl rounded-full pointer-events-none" style={{ background: "rgba(139,92,246,0.25)" }} />
       <div className="relative rounded-[2.5rem] overflow-hidden shadow-2xl" style={{ border: "3px solid rgba(255,255,255,0.2)", background: "#1a0533" }}>
         <div className="mx-auto mt-2 w-20 h-5 rounded-full" style={{ background: "rgba(0,0,0,0.6)" }} />
@@ -99,7 +106,7 @@ function PhoneMockup() {
         </div>
         <div className="mx-auto mb-2 w-16 h-1 rounded-full" style={{ background: "rgba(255,255,255,0.2)" }} />
       </div>
-    </div>
+    </motion.div>
   )
 }
 
@@ -199,7 +206,11 @@ export default function LandingPage() {
   }
 
   return (
-    <div className="min-h-screen overflow-x-hidden" style={{ background: C.bg, color: C.text }}>
+    <div className="min-h-screen overflow-x-hidden" style={{ background: C.bg, color: C.text, position: "relative" }}>
+      {/* Grain overlay */}
+      <div aria-hidden style={{ pointerEvents: "none", position: "fixed", inset: 0, zIndex: 999, opacity: 0.025,
+        backgroundImage: "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")",
+        backgroundRepeat: "repeat", backgroundSize: "150px 150px" }} />
 
       {/* NAV */}
       <nav className="sticky top-0 z-50 backdrop-blur-md" style={{ borderBottom: `1px solid ${C.border}`, background: "rgba(250,249,247,0.9)" }}>
@@ -248,8 +259,17 @@ export default function LandingPage() {
       </div>
 
       {/* HERO */}
-      <section className="max-w-6xl mx-auto px-4 pt-12 pb-16 grid lg:grid-cols-2 gap-10 items-center">
-        <div className="space-y-6">
+      <section className="relative max-w-6xl mx-auto px-4 pt-12 pb-16 grid lg:grid-cols-2 gap-10 items-center">
+        {/* Gradient mesh background */}
+        <div aria-hidden style={{ pointerEvents: "none", position: "absolute", inset: 0, zIndex: 0, overflow: "hidden" }}>
+          <div style={{ position: "absolute", top: "-80px", left: "-120px", width: 500, height: 500, borderRadius: "50%",
+            background: "radial-gradient(circle, rgba(124,58,237,0.12) 0%, transparent 70%)" }} />
+          <div style={{ position: "absolute", top: "60px", right: "-100px", width: 380, height: 380, borderRadius: "50%",
+            background: "radial-gradient(circle, rgba(109,40,217,0.08) 0%, transparent 70%)" }} />
+          <div style={{ position: "absolute", bottom: "-40px", left: "40%", width: 300, height: 300, borderRadius: "50%",
+            background: "radial-gradient(circle, rgba(167,139,250,0.07) 0%, transparent 70%)" }} />
+        </div>
+        <div className="space-y-6 relative z-10">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold"
               style={{ background: "rgba(124,58,237,0.1)", color: C.primary, border: `1px solid rgba(124,58,237,0.2)` }}>
@@ -259,7 +279,7 @@ export default function LandingPage() {
 
           <motion.h1 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.1 }}
             className="font-black leading-[1.1] tracking-tight"
-            style={{ fontSize: "clamp(2rem,6vw,3.5rem)", color: C.text }}>
+            style={{ fontSize: "clamp(2rem,6vw,3.5rem)", color: C.text, fontFamily: syne.style.fontFamily }}>
             Para o seu dinheiro,{" "}
             <span style={{ color: C.primary }}>pode contar comigo.</span>
           </motion.h1>
@@ -285,7 +305,7 @@ export default function LandingPage() {
 
         <motion.div initial={{ opacity: 0, scale: 0.9, y: 30 }} animate={{ opacity: 1, scale: 1, y: 0 }}
           transition={{ duration: 0.7, delay: 0.2 }}
-          className="flex justify-center lg:justify-end">
+          className="flex justify-center lg:justify-end relative z-10">
           <PhoneMockup />
         </motion.div>
       </section>
@@ -294,7 +314,7 @@ export default function LandingPage() {
       <section className="py-16" style={{ background: C.section }}>
         <div className="max-w-6xl mx-auto px-4">
           <FadeIn className="text-center mb-10">
-            <h2 className="text-3xl font-black mb-3" style={{ color: C.text }}>Você se identifica?</h2>
+            <h2 className="text-3xl font-black mb-3" style={{ color: C.text, fontFamily: syne.style.fontFamily }}>Você se identifica?</h2>
             <p style={{ color: C.muted, fontSize: 17 }}>Se sim, o Conta Comigo foi feito pra você.</p>
           </FadeIn>
           <div className="grid md:grid-cols-3 gap-5">
@@ -310,7 +330,7 @@ export default function LandingPage() {
                 bg: "#eff6ff", border: "#bfdbfe" },
             ].map((d, i) => (
               <FadeIn key={i} delay={i * 0.1}>
-                <div className="rounded-3xl p-6 h-full" style={{ background: d.bg, border: `1px solid ${d.border}` }}>
+                <div className="rounded-3xl p-6 h-full transition-transform duration-300 hover:-translate-y-1 hover:shadow-lg" style={{ background: d.bg, border: `1px solid ${d.border}` }}>
                   <div className="text-4xl mb-4">{d.emoji}</div>
                   <h3 className="font-bold text-base mb-2" style={{ color: C.text }}>{d.title}</h3>
                   <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.6 }}>{d.body}</p>
@@ -333,7 +353,7 @@ export default function LandingPage() {
       <section id="como-funciona" className="py-16 max-w-6xl mx-auto px-4">
         <FadeIn className="text-center mb-12">
           <span className="text-sm font-semibold uppercase tracking-widest" style={{ color: C.primary }}>Simples assim</span>
-          <h2 className="text-3xl font-black mt-2 mb-3" style={{ color: C.text }}>3 passos. Sem complicação.</h2>
+          <h2 className="text-3xl font-black mt-2 mb-3" style={{ color: C.text, fontFamily: syne.style.fontFamily }}>3 passos. Sem complicação.</h2>
           <p style={{ color: C.muted, fontSize: 17 }}>Do zero à clareza financeira em menos de 5 minutos.</p>
         </FadeIn>
         <div className="grid md:grid-cols-3 gap-8">
@@ -369,7 +389,7 @@ export default function LandingPage() {
       <section className="py-16" style={{ background: C.section }}>
         <div className="max-w-4xl mx-auto px-4">
           <FadeIn className="text-center mb-10">
-            <h2 className="text-3xl font-black mb-3" style={{ color: C.text }}>Por que não o app do banco?</h2>
+            <h2 className="text-3xl font-black mb-3" style={{ color: C.text, fontFamily: syne.style.fontFamily }}>Por que não o app do banco?</h2>
             <p style={{ color: C.muted, fontSize: 17 }}>Seu app bancário mostra o passado. O Conta Comigo cuida do futuro.</p>
           </FadeIn>
           <FadeIn>
@@ -409,7 +429,7 @@ export default function LandingPage() {
         <div className="grid lg:grid-cols-2 gap-12 items-center">
           <FadeIn>
             <span className="text-sm font-semibold uppercase tracking-widest" style={{ color: "#f59e0b" }}>Gamificação</span>
-            <h2 className="text-3xl font-black mt-2 mb-4" style={{ color: C.text }}>Finança virou jogo.<br />E você vai querer jogar.</h2>
+            <h2 className="text-3xl font-black mt-2 mb-4" style={{ color: C.text, fontFamily: syne.style.fontFamily }}>Finança virou jogo.<br />E você vai querer jogar.</h2>
             <p className="mb-6" style={{ color: C.muted, lineHeight: 1.7 }}>
               Cada gasto registrado, cada meta batida e cada semana no azul te dá pontos, sobe seu nível e completa missões. É viciante — e esse é o ponto.
             </p>
@@ -429,7 +449,7 @@ export default function LandingPage() {
               ))}
             </div>
           </FadeIn>
-          <FadeIn delay={0.2} className="flex justify-center">
+          <FadeIn delay={0.2} scale className="flex justify-center">
             <div className="rounded-3xl p-6 text-white max-w-xs w-full shadow-xl"
               style={{ background: "linear-gradient(135deg,#f59e0b,#f97316)" }}>
               <p className="text-xs font-semibold uppercase tracking-widest mb-1" style={{ color: "rgba(255,255,255,0.7)" }}>Sua pontuação</p>
@@ -468,21 +488,23 @@ export default function LandingPage() {
       <section id="precos" className="py-16" style={{ background: C.section }}>
         <div className="max-w-3xl mx-auto px-4">
           <FadeIn className="text-center mb-10">
-            <h2 className="text-3xl font-black mb-3" style={{ color: C.text }}>Preço honesto. Sem mensalidade.</h2>
+            <h2 className="text-3xl font-black mb-3" style={{ color: C.text, fontFamily: syne.style.fontFamily }}>Preço honesto. Sem mensalidade.</h2>
             <p style={{ color: C.muted, fontSize: 17 }}>Pague uma vez. Use para sempre.</p>
           </FadeIn>
 
-          <FadeIn delay={0.1}>
+          <FadeIn delay={0.1} scale>
             <div className="rounded-3xl p-7 text-white text-center mb-5 relative overflow-hidden"
               style={{ background: `linear-gradient(135deg,${C.primary},#5b21b6)` }}>
-              <div className="absolute -top-8 -right-8 w-40 h-40 rounded-full pointer-events-none" style={{ background: "rgba(255,255,255,0.05)" }} />
-              <div className="absolute -bottom-10 -left-6 w-48 h-48 rounded-full pointer-events-none" style={{ background: "rgba(255,255,255,0.05)" }} />
+              <div className="absolute -top-8 -right-8 w-48 h-48 rounded-full pointer-events-none" style={{ background: "radial-gradient(circle, rgba(255,255,255,0.15) 0%, transparent 70%)" }} />
+              <div className="absolute -bottom-12 -left-8 w-64 h-64 rounded-full pointer-events-none" style={{ background: "radial-gradient(circle, rgba(167,139,250,0.2) 0%, transparent 70%)" }} />
+              <div className="absolute top-1/2 right-12 w-2 h-2 rounded-full pointer-events-none" style={{ background: "rgba(255,255,255,0.4)" }} />
+              <div className="absolute top-8 left-1/3 w-1.5 h-1.5 rounded-full pointer-events-none" style={{ background: "rgba(255,255,255,0.3)" }} />
               <div className="relative">
                 <div className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-bold mb-4"
                   style={{ background: "rgba(255,255,255,0.2)" }}>
                   <Gift size={16} /> Período de lançamento
                 </div>
-                <h3 className="text-3xl font-black mb-2">Agora é grátis para sempre</h3>
+                <h3 className="text-3xl font-black mb-2" style={{ fontFamily: syne.style.fontFamily }}>Agora é grátis para sempre</h3>
                 <p className="text-base mb-6 max-w-sm mx-auto" style={{ color: "rgba(255,255,255,0.75)" }}>
                   Quem se cadastrar durante o lançamento garante acesso vitalício gratuito. Sem cartão, sem cobrança, sem pegadinha.
                 </p>
@@ -543,7 +565,7 @@ export default function LandingPage() {
       <section id="faq" className="py-16">
         <div className="max-w-6xl mx-auto px-4">
           <FadeIn className="text-center mb-10">
-            <h2 className="text-3xl font-black mb-3" style={{ color: C.text }}>Dúvidas frequentes</h2>
+            <h2 className="text-3xl font-black mb-3" style={{ color: C.text, fontFamily: syne.style.fontFamily }}>Dúvidas frequentes</h2>
             <p style={{ color: C.muted }}>Tire suas dúvidas antes de começar.</p>
           </FadeIn>
           <FAQ />
@@ -555,11 +577,13 @@ export default function LandingPage() {
         <FadeIn>
           <div className="rounded-3xl p-8 md:p-14 text-center text-white relative overflow-hidden"
             style={{ background: `linear-gradient(135deg,${C.primary},#5b21b6)` }}>
-            <div className="absolute -top-12 -right-12 w-48 h-48 rounded-full pointer-events-none" style={{ background: "rgba(255,255,255,0.05)" }} />
-            <div className="absolute -bottom-16 -left-8 w-64 h-64 rounded-full pointer-events-none" style={{ background: "rgba(255,255,255,0.05)" }} />
+            <div className="absolute -top-12 -right-12 w-56 h-56 rounded-full pointer-events-none" style={{ background: "radial-gradient(circle, rgba(255,255,255,0.12) 0%, transparent 70%)" }} />
+            <div className="absolute -bottom-16 -left-8 w-72 h-72 rounded-full pointer-events-none" style={{ background: "radial-gradient(circle, rgba(167,139,250,0.18) 0%, transparent 70%)" }} />
+            <div className="absolute top-6 left-1/4 w-2 h-2 rounded-full pointer-events-none" style={{ background: "rgba(255,255,255,0.35)" }} />
+            <div className="absolute bottom-10 right-1/4 w-1.5 h-1.5 rounded-full pointer-events-none" style={{ background: "rgba(255,255,255,0.25)" }} />
             <div className="relative">
               <p className="text-sm font-semibold uppercase tracking-widest mb-3" style={{ color: "rgba(255,255,255,0.7)" }}>Chega de aperto financeiro</p>
-              <h2 className="font-black mb-4 leading-tight" style={{ fontSize: "clamp(1.6rem,4vw,2.5rem)" }}>
+              <h2 className="font-black mb-4 leading-tight" style={{ fontSize: "clamp(1.6rem,4vw,2.5rem)", fontFamily: syne.style.fontFamily }}>
                 Seu dinheiro estava esperando<br />você prestar atenção nele.
               </h2>
               <p className="text-lg mb-8 max-w-xl mx-auto" style={{ color: "rgba(255,255,255,0.75)" }}>

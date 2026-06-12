@@ -354,6 +354,7 @@ function TabCartoes({ userId }: { userId: string }) {
   const [cards, setCards] = useState<any[]>([])
   const [cardTxns, setCardTxns] = useState<Record<string, any[]>>({})
   const [sheet, setSheet] = useState<"add" | any | null>(null)
+  const [paySheet, setPaySheet] = useState<{ card: any; fatura: number } | null>(null)
   const [expandedCard, setExpandedCard] = useState<string | null>(null)
 
   useEffect(() => {
@@ -493,6 +494,16 @@ function TabCartoes({ userId }: { userId: string }) {
                     </div>
                   </div>
 
+                  {/* Pay fatura button */}
+                  {realUsed > 0 && (
+                    <button
+                      onClick={() => setPaySheet({ card, fatura: realUsed })}
+                      className="w-full py-2.5 rounded-2xl text-white text-sm font-bold transition-opacity hover:opacity-90"
+                      style={{ background: "linear-gradient(135deg,#7c3aed,#6d28d9)" }}>
+                      💳 Pagar fatura · {formatCurrency(realUsed)}
+                    </button>
+                  )}
+
                   {/* Transactions toggle */}
                   {txns.length > 0 && (
                     <button onClick={() => setExpandedCard(isExpanded ? null : card.id)}
@@ -536,7 +547,120 @@ function TabCartoes({ userId }: { userId: string }) {
           />
         )}
       </AnimatePresence>
+      <AnimatePresence>
+        {paySheet !== null && (
+          <PayFaturaSheet
+            card={paySheet.card}
+            fatura={paySheet.fatura}
+            onClose={() => setPaySheet(null)}
+            onPaid={() => { setPaySheet(null); loadCards() }}
+          />
+        )}
+      </AnimatePresence>
     </div>
+  )
+}
+
+// ─── Pay Fatura Sheet ─────────────────────────────────────────────────────────
+
+function PayFaturaSheet({ card, fatura, onClose, onPaid }: {
+  card: any; fatura: number; onClose: () => void; onPaid: () => void
+}) {
+  const [accounts, setAccounts] = useState<any[]>([])
+  const [accountId, setAccountId] = useState("")
+  const [saving, setSaving] = useState(false)
+  const [done, setDone] = useState(false)
+  const [err, setErr] = useState("")
+  const today = new Date().toISOString().split("T")[0]
+
+  useEffect(() => {
+    createClient().from("accounts").select("id,name,current_balance,color")
+      .eq("is_active", true).order("created_at")
+      .then(({ data }) => {
+        if (data?.length) { setAccounts(data); setAccountId(data[0].id) }
+      })
+  }, [])
+
+  async function handlePay() {
+    if (!accountId) { setErr("Selecione uma conta"); return }
+    setSaving(true); setErr("")
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { setSaving(false); return }
+    const { error } = await supabase.from("transactions").insert({
+      user_id: user.id, type: "expense",
+      description: `Pagamento fatura ${card.name}`,
+      amount: fatura, date: today,
+      account_id: accountId, status: "confirmed",
+      notes: "💳|Cartão", tags: [],
+    })
+    if (error) { setErr(error.message); setSaving(false); return }
+    window.dispatchEvent(new CustomEvent("transaction-added"))
+    setDone(true)
+    setTimeout(onPaid, 1400)
+  }
+
+  return (
+    <>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        onClick={onClose} className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40" />
+      <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
+        transition={{ type: "spring", damping: 28, stiffness: 300 }}
+        className="fixed bottom-0 left-0 right-0 z-50 bg-card rounded-t-3xl shadow-2xl max-w-lg mx-auto p-6 pb-10">
+        {done ? (
+          <div className="flex flex-col items-center gap-3 py-8">
+            <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ background: "#7c3aed" }}>
+              <Check className="size-8 text-white" />
+            </div>
+            <p className="text-lg font-black">Fatura paga! 🎉</p>
+            <p className="text-sm text-muted-foreground">{formatCurrency(fatura)} debitado da conta</p>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h3 className="text-xl font-black">Pagar fatura</h3>
+                <p className="text-sm text-muted-foreground">{card.name} · vence dia {card.due_day}</p>
+              </div>
+              <button onClick={onClose} className="w-9 h-9 rounded-full bg-muted flex items-center justify-center">
+                <X className="size-4" />
+              </button>
+            </div>
+
+            {/* Fatura value */}
+            <div className="rounded-2xl p-4 mb-5 text-center" style={{ background: `linear-gradient(135deg,${card.color}22,${card.color}11)`, border: `1px solid ${card.color}44` }}>
+              <p className="text-xs text-muted-foreground mb-1">Valor da fatura</p>
+              <p className="text-3xl font-black" style={{ color: card.color }}>{formatCurrency(fatura)}</p>
+            </div>
+
+            {/* Account selector */}
+            <p className="text-xs font-semibold text-muted-foreground mb-2">Pagar com qual conta?</p>
+            <div className="space-y-2 mb-5">
+              {accounts.map(acc => (
+                <button key={acc.id} onClick={() => setAccountId(acc.id)}
+                  className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl border-2 transition-all ${
+                    accountId === acc.id ? "border-primary bg-primary/8" : "border-border/60 bg-muted/30"
+                  }`}>
+                  <span className={`text-sm font-semibold ${accountId === acc.id ? "text-primary" : "text-foreground"}`}>{acc.name}</span>
+                  <span className="text-xs text-muted-foreground">saldo: {formatCurrency(acc.current_balance ?? 0)}</span>
+                </button>
+              ))}
+              {accounts.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-2">Nenhuma conta cadastrada</p>
+              )}
+            </div>
+
+            {err && <p className="text-sm text-red-500 mb-3">⚠️ {err}</p>}
+
+            <button onClick={handlePay} disabled={saving || accounts.length === 0}
+              className="w-full h-14 rounded-2xl text-white font-black text-base disabled:opacity-40"
+              style={{ background: "linear-gradient(135deg,#7c3aed,#6d28d9)" }}>
+              {saving ? "Registrando..." : `✓ Confirmar pagamento · ${formatCurrency(fatura)}`}
+            </button>
+          </>
+        )}
+      </motion.div>
+    </>
   )
 }
 

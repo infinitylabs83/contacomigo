@@ -24,19 +24,23 @@ export default async function DashboardPage() {
   const from  = `${year}-${month}-01`
   const to    = `${year}-${month}-31`
 
-  const [accountsRes, transactionsRes, gamificationRes, tasksRes, budgetLimitsRes] = await Promise.allSettled([
+  const [accountsRes, transactionsRes, allTxnsRes, gamificationRes, tasksRes, budgetLimitsRes, goalsRes] = await Promise.allSettled([
     supabase.from("accounts").select("*").order("created_at", { ascending: true }),
     supabase.from("transactions").select("*").gte("date", from).lte("date", to),
+    supabase.from("transactions").select("date").order("date", { ascending: false }),
     supabase.from("gamification").select("*").maybeSingle(),
     supabase.from("financial_tasks").select("*").eq("status", "pending").order("created_at", { ascending: false }).limit(4),
     supabase.from("budget_limits").select("*").eq("month", Number(month)).eq("year", year),
+    supabase.from("goals").select("id").limit(1),
   ])
 
   const accounts     = accountsRes.status      === "fulfilled" ? (accountsRes.value.data      ?? []) : []
   const transactions = transactionsRes.status  === "fulfilled" ? (transactionsRes.value.data  ?? []) : []
+  const allTxns      = allTxnsRes.status       === "fulfilled" ? (allTxnsRes.value.data        ?? []) : []
   const gamification = gamificationRes.status  === "fulfilled" ? gamificationRes.value.data   : null
   const tasks        = tasksRes.status         === "fulfilled" ? (tasksRes.value.data         ?? []) : []
   const budgetLimits = budgetLimitsRes.status  === "fulfilled" ? (budgetLimitsRes.value.data  ?? []) : []
+  const goals        = goalsRes.status         === "fulfilled" ? (goalsRes.value.data          ?? []) : []
 
   const income       = transactions.filter((t: any) => t.type === "income").reduce((s: number, t: any) => s + t.amount, 0)
   const expense      = transactions.filter((t: any) => t.type === "expense").reduce((s: number, t: any) => s + t.amount, 0)
@@ -68,19 +72,63 @@ export default async function DashboardPage() {
       category: { id: s.label, name: s.label, color: CATEGORY_COLORS[s.label] ?? "#7c3aed", emoji: s.emoji },
     }))
 
-  // Auto-generate weekly missions based on user activity
-  const txnCount = transactions.filter((t: any) => t.type === "expense").length
+  // Calculate streak from all transaction dates
+  const txnDates = [...new Set(allTxns.map((t: any) => t.date))].sort().reverse() as string[]
+  let streak = 0
+  if (txnDates.length > 0) {
+    const todayISO = now.toISOString().slice(0, 10)
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10)
+    if (txnDates[0] === todayISO || txnDates[0] === yesterday) {
+      let prev = new Date(txnDates[0] + "T12:00:00")
+      streak = 1
+      for (let i = 1; i < txnDates.length; i++) {
+        const cur = new Date(txnDates[i] + "T12:00:00")
+        const diff = Math.round((prev.getTime() - cur.getTime()) / 86400000)
+        if (diff === 1) { streak++; prev = cur } else break
+      }
+    }
+  }
+
+  // Calculate points dynamically
+  const allTxnCount = allTxns.length
+  const rawPoints = allTxnCount * 10
+    + accounts.length * 20
+    + goals.length * 50
+    + budgetLimits.length * 40
+    + streak * 5
+  const totalPoints = gamification?.total_points
+    ? Math.max(gamification.total_points, rawPoints)
+    : rawPoints
+
+  // Level from points
+  const levelThresholds = [0, 500, 1500, 3000, 6000, 10000]
+  let level = 1
+  for (let i = levelThresholds.length - 1; i >= 0; i--) {
+    if (totalPoints >= levelThresholds[i]) { level = i + 1; break }
+  }
+
+  // Health score from real data
   const hasIncome = income > 0
+  let healthScore = 40
+  if (hasIncome) healthScore += 15
+  if (income > 0 && expense < income) healthScore += 20
+  else if (expense > income && income > 0) healthScore -= 10
+  if (budgetLimits.length > 0) healthScore += 10
+  if (streak >= 3) healthScore += 5
+  if (streak >= 7) healthScore += 5
+  if (goals.length > 0) healthScore += 5
+  healthScore = Math.max(10, Math.min(100, healthScore))
+
+  // Auto-generate weekly missions based on user activity
+  const txnCount  = transactions.filter((t: any) => t.type === "expense").length
   const hasAccount = accounts.length > 0
-  const hasBudget = budgetLimits.length > 0
-  const weeklyMissions = gamification?.weekly_missions?.length
-    ? gamification.weekly_missions
-    : [
-        { id: "m1", title: "Registrar sua renda do mês", points: 50, is_completed: hasIncome, progress: hasIncome ? 1 : 0, total: 1 },
-        { id: "m2", title: "Lançar pelo menos 5 gastos", points: 30, is_completed: txnCount >= 5, progress: Math.min(txnCount, 5), total: 5 },
-        { id: "m3", title: "Criar uma conta bancária", points: 20, is_completed: hasAccount, progress: hasAccount ? 1 : 0, total: 1 },
-        { id: "m4", title: "Definir limite para uma categoria", points: 40, is_completed: hasBudget, progress: hasBudget ? 1 : 0, total: 1 },
-      ]
+  const hasBudget  = budgetLimits.length > 0
+  const weeklyMissions = [
+    { id: "m1", title: "Registrar sua renda do mês",        description: "", icon: "💚", points: 50, is_completed: hasIncome,     progress: hasIncome ? 1 : 0,     total: 1 },
+    { id: "m2", title: "Lançar pelo menos 5 gastos",        description: "", icon: "📝", points: 30, is_completed: txnCount >= 5, progress: Math.min(txnCount, 5), total: 5 },
+    { id: "m3", title: "Criar uma conta bancária",          description: "", icon: "🏦", points: 20, is_completed: hasAccount,    progress: hasAccount ? 1 : 0,    total: 1 },
+    { id: "m4", title: "Definir limite para uma categoria", description: "", icon: "🎯", points: 40, is_completed: hasBudget,     progress: hasBudget ? 1 : 0,     total: 1 },
+  ]
 
   // When no income registered this month, show total account balance as "available"
   const noMonthlyData = income === 0 && expense === 0
@@ -93,7 +141,7 @@ export default async function DashboardPage() {
     freeMoney:     displayFree,
     upcomingBills: { amount: 0, count: 0, soonest: null },
     openInvoices:  0,
-    healthScore:   gamification?.health_score ?? 0,
+    healthScore,
     alertLevel:    displayFree >= 0 ? "safe" : displayFree > -500 ? "attention" : "danger",
     topInsight:    noMonthlyData
       ? "Este é o saldo total das suas contas 🏦"
@@ -108,11 +156,11 @@ export default async function DashboardPage() {
   }
 
   const gamificationData: GamificationState = {
-    health_score:    gamification?.health_score ?? 0,
-    total_points:    gamification?.total_points ?? 0,
-    level:           gamification?.level        ?? 1,
-    streak_days:     gamification?.streak_days  ?? 0,
-    achievements:    Array.isArray(gamification?.achievements) ? gamification.achievements : [],
+    health_score:    healthScore,
+    total_points:    totalPoints,
+    level,
+    streak_days:     streak,
+    achievements:    [],
     weekly_missions: weeklyMissions,
   }
 

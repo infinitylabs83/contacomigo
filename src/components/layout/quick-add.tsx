@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { X, Check, ChevronDown, ChevronUp } from "lucide-react"
+import { X, Check, ChevronDown, ChevronUp, CalendarDays } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { createClient } from "@/lib/supabase/client"
 
@@ -57,6 +57,8 @@ export function QuickAdd() {
   const [isRecurring, setIsRecurring]  = useState(false)
   const [saveError, setSaveError]     = useState("")
   const [saving, setSaving]           = useState(false)
+  const [txDate, setTxDate]           = useState(() => new Date().toISOString().split("T")[0])
+  const [showDatePicker, setShowDatePicker] = useState(false)
   const [accounts, setAccounts]       = useState<RealAccount[]>([])
   const [cards, setCards]             = useState<RealCard[]>([])
   const mounted = useRef(true)
@@ -88,6 +90,8 @@ export function QuickAdd() {
     setAmount(""); setDescription(""); setShowDetails(false)
     setDone(false); setSaving(false); setIsRecurring(false); setSaveError("")
     setPayMethod("cash"); setInstallments(1)
+    setTxDate(new Date().toISOString().split("T")[0])
+    setShowDatePicker(false)
     if (accounts.length > 0) setAccountId(accounts[0].id)
     if (cards.length > 0) setCreditCardId(cards[0].id)
   }
@@ -130,7 +134,6 @@ export function QuickAdd() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { setSaving(false); return }
 
-      const today = new Date().toISOString().split("T")[0]
       const label = description.trim() || selectedCat?.label || (mode === "expense" ? "Gasto" : "Receita")
 
       // Ensure we have an account — create default wallet if none
@@ -152,7 +155,7 @@ export function QuickAdd() {
         type:                mode,
         description:         label,
         amount:              parsed,
-        date:                today,
+        date:                txDate,
         account_id:          resolvedAccountId,
         status:              "confirmed",
         notes:               selectedCat ? `${selectedCat.emoji}|${selectedCat.label}` : null,
@@ -186,8 +189,13 @@ export function QuickAdd() {
     }
   }
 
-  const cats = mode === "expense" ? EXPENSE_CATS : INCOME_CATS
-  const pts  = mode === "income" ? 20 : 10
+  const cats      = mode === "expense" ? EXPENSE_CATS : INCOME_CATS
+  const pts       = mode === "income" ? 20 : 10
+  const todayStr  = new Date().toISOString().split("T")[0]
+  const isPastDate = txDate !== todayStr
+  const dateLabel  = isPastDate
+    ? new Date(txDate + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })
+    : "Hoje"
 
   return (
     <>
@@ -344,6 +352,41 @@ export function QuickAdd() {
                     </button>
                   </div>
 
+                  {/* Date chip */}
+                  <div className="mb-4">
+                    <button
+                      type="button"
+                      onClick={() => setShowDatePicker(v => !v)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                        isPastDate
+                          ? "border-amber-300 bg-amber-50 text-amber-700"
+                          : "border-border/60 bg-muted/40 text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                      }`}
+                    >
+                      <CalendarDays className="size-3.5" />
+                      {dateLabel}
+                      {isPastDate && " ↩"}
+                    </button>
+                    <AnimatePresence>
+                      {showDatePicker && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          className="overflow-hidden"
+                        >
+                          <input
+                            type="date"
+                            value={txDate}
+                            max={todayStr}
+                            onChange={e => { setTxDate(e.target.value); setShowDatePicker(false) }}
+                            className="mt-2 w-full h-10 rounded-xl border border-border bg-background px-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40"
+                          />
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+
                   <p className="text-sm font-semibold text-muted-foreground mb-2">
                     {mode === "expense" ? "Quanto você gastou?" : "Quanto entrou?"}
                   </p>
@@ -399,13 +442,29 @@ export function QuickAdd() {
                     </div>
                   )}
 
-                  {/* Badge informativo quando é assinatura */}
-                  {isRecurring && (
+                  {/* Recorrência — toggle para income, badge para assinatura */}
+                  {mode === "income" ? (
+                    <button type="button" onClick={() => setIsRecurring(v => !v)}
+                      className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl border-2 mb-3 transition-all ${
+                        isRecurring ? "border-green-400 bg-green-50 text-green-700" : "border-border/60 bg-muted/30 text-muted-foreground"
+                      }`}>
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-base">🔁</span>
+                        <div className="text-left">
+                          <p className="text-xs font-bold leading-tight">Recebo todo mês?</p>
+                          <p className="text-[10px] opacity-70 leading-tight">Aparece em Próximos vencimentos</p>
+                        </div>
+                      </div>
+                      <div className={`w-10 h-6 rounded-full transition-colors relative shrink-0 ${isRecurring ? "bg-green-500" : "bg-border"}`}>
+                        <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all ${isRecurring ? "left-5" : "left-1"}`} />
+                      </div>
+                    </button>
+                  ) : isRecurring ? (
                     <div className="flex items-center gap-2 bg-primary/8 border border-primary/20 rounded-2xl px-3 py-2 mb-3">
                       <span className="text-base">🔁</span>
                       <p className="text-xs font-semibold text-primary">Vai aparecer em "Assino todo mês" automaticamente</p>
                     </div>
-                  )}
+                  ) : null}
 
                   {/* Optional details */}
                   <button onClick={() => setShowDetails(!showDetails)}

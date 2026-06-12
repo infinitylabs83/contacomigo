@@ -450,6 +450,12 @@ function TabLimite({ userId }: { userId: string }) {
   const [limits, setLimits]     = useState<any[]>([])
   const [txns, setTxns]         = useState<any[]>([])
   const [sheet, setSheet]       = useState(false)
+
+  useEffect(() => {
+    const handler = () => setSheet(true)
+    window.addEventListener("plan-add-limite", handler)
+    return () => window.removeEventListener("plan-add-limite", handler)
+  }, [])
   const [editingLimit, setEditingLimit] = useState<any | null>(null)
   const [editAmount, setEditAmount]     = useState("")
 
@@ -902,7 +908,10 @@ export default function PlanPage() {
       <div className="flex items-center justify-between mb-5">
         <h1 className="text-2xl font-black">Planejar</h1>
         {tab !== "proximos" && (
-          <Button size="sm" onClick={() => setAddSheet(true)}
+          <Button size="sm" onClick={() => {
+            if (tab === "limite") window.dispatchEvent(new CustomEvent("plan-add-limite"))
+            else setAddSheet(true)
+          }}
             className="gap-1.5 rounded-xl border-0 text-white shadow-sm shadow-primary/30"
             style={{ background: "linear-gradient(135deg,#7c3aed,#6d28d9)" }}>
             <Plus className="size-4" />{newLabel[tab]}
@@ -933,10 +942,7 @@ export default function PlanPage() {
       )}
 
       {tab === "limite" && (
-        <>
-          <TabLimite userId={userId} />
-          {/* BudgetSheet triggered internally via TabLimite */}
-        </>
+        <TabLimite userId={userId} />
       )}
 
       {tab === "proximos" && <TabProximos transactions={transactions} cards={cards} />}

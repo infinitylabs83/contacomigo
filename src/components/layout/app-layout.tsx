@@ -19,12 +19,13 @@ export function AppLayout({ children, title }: AppLayoutProps) {
 
   useEffect(() => {
     if (typeof window === "undefined") return
-    if (localStorage.getItem("onboarding_v1_done")) return
     const supabase = createClient()
     supabase.auth.getUser().then(({ data }) => {
-      const name = (data.user?.user_metadata?.full_name as string)?.split(" ")[0] ?? ""
+      const user = data.user
+      if (!user) return
+      const name = (user.user_metadata?.full_name as string)?.split(" ")[0] ?? ""
       setUserName(name)
-      setShowOnboarding(true)
+      if (!user.user_metadata?.onboarding_done) setShowOnboarding(true)
     })
   }, [])
 

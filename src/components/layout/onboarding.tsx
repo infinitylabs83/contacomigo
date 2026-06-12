@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input"
 import { createClient } from "@/lib/supabase/client"
 import { formatCurrency } from "@/lib/utils"
 
-const STORAGE_KEY = "onboarding_v1_done"
 
 const ACCOUNT_TYPES = [
   { id: "checking", emoji: "🏦", label: "Conta corrente" },
@@ -93,9 +92,7 @@ export function Onboarding({ userName }: { userName: string }) {
   const [showPoints, setShowPoints] = useState(false)
 
   useEffect(() => {
-    if (typeof window !== "undefined" && !localStorage.getItem(STORAGE_KEY)) {
-      setVisible(true)
-    }
+    setVisible(true)
     const supabase = createClient()
     supabase.auth.getUser().then(({ data }) => {
       if (data.user) setUserId(data.user.id)
@@ -113,9 +110,10 @@ export function Onboarding({ userName }: { userName: string }) {
     setStep((current + 1) as Step)
   }
 
-  function finish() {
+  async function finish() {
     addPoints(STEP_POINTS[7])
-    localStorage.setItem(STORAGE_KEY, "1")
+    const supabase = createClient()
+    await supabase.auth.updateUser({ data: { onboarding_done: true } })
     setTimeout(() => {
       setVisible(false)
       window.dispatchEvent(new CustomEvent("transaction-added"))

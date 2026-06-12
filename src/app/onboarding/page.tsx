@@ -3,484 +3,975 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
-import { Check, ChevronRight } from "lucide-react"
-import { Input } from "@/components/ui/input"
+import { Building2, Wallet, PiggyBank, CreditCard } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
-import { formatCurrency } from "@/lib/utils"
 
-const ACCOUNT_TYPES = [
-  { id: "checking", emoji: "🏦", label: "Conta corrente" },
-  { id: "savings",  emoji: "🐷", label: "Poupança" },
-  { id: "wallet",   emoji: "👛", label: "Carteira / dinheiro" },
-]
-const INCOME_CATS = [
-  { id: "salary",    emoji: "💼", label: "Salário" },
-  { id: "freelance", emoji: "💻", label: "Freela" },
-  { id: "rent",      emoji: "🏘️", label: "Aluguel" },
-  { id: "other",     emoji: "💰", label: "Outros" },
-]
-const BUDGET_CATS = [
-  { id: "Comida",     emoji: "🍔", color: "#F97316" },
-  { id: "Mercado",    emoji: "🛒", color: "#84CC16" },
-  { id: "Transporte", emoji: "🚗", color: "#3B82F6" },
-  { id: "Moradia",    emoji: "🏠", color: "#6B7280" },
-  { id: "Saúde",      emoji: "💊", color: "#EF4444" },
-  { id: "Lazer",      emoji: "🎮", color: "#EC4899" },
-  { id: "Assinatura", emoji: "📱", color: "#0EA5E9" },
-  { id: "Estudo",     emoji: "📚", color: "#8B5CF6" },
-]
-const EXPENSE_CATS = [
-  { id: "cat-food",      emoji: "🍔", label: "Comida" },
-  { id: "cat-market",    emoji: "🛒", label: "Mercado" },
-  { id: "cat-transport", emoji: "🚗", label: "Transporte" },
-  { id: "cat-housing",   emoji: "🏠", label: "Moradia" },
-  { id: "cat-health",    emoji: "💊", label: "Saúde" },
-  { id: "cat-leisure",   emoji: "🎮", label: "Lazer" },
-]
+// ─── Types ───────────────────────────────────────────────────────────────────
 
-type Step = 1 | 2 | 3 | 4 | 5 | 6 | 7
-const STEP_POINTS: Record<Step, number> = { 1: 10, 2: 20, 3: 20, 4: 10, 5: 40, 6: 50, 7: 50 }
-const TOTAL_STEPS = 7
+type Step = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
+
+const TOTAL_STEPS = 9
+const STEP_POINTS: Record<Step, number> = {
+  1: 10, 2: 20, 3: 20, 4: 10, 5: 20, 6: 10, 7: 40, 8: 50, 9: 50,
+}
+
+// ─── Mockup helpers ───────────────────────────────────────────────────────────
+
+function MockBottomNav({ highlight }: { highlight?: string }) {
+  const tabs = [
+    { id: "home",    emoji: "🏠", label: "Início" },
+    { id: "plan",    emoji: "📋", label: "Planejar" },
+    { id: "add",     fab: true },
+    { id: "cards",   emoji: "💳", label: "Contas" },
+    { id: "profile", emoji: "👤", label: "Perfil" },
+  ]
+  return (
+    <div className="flex items-center justify-around bg-card border-t border-border/50 px-1 py-1.5">
+      {tabs.map(t => (
+        <div key={t.id} className={`flex flex-col items-center gap-0.5 ${t.fab ? "relative -top-3" : ""}`}>
+          {t.fab ? (
+            <motion.div
+              animate={highlight === "add" ? { scale: [1, 1.15, 1] } : {}}
+              transition={{ repeat: Infinity, duration: 1.2 }}
+              className={`w-10 h-10 rounded-full flex items-center justify-center shadow-lg text-white font-black text-xl ${highlight === "add" ? "ring-4 ring-primary/40" : ""}`}
+              style={{ background: "linear-gradient(135deg,#7c3aed,#6d28d9)" }}>
+              +
+            </motion.div>
+          ) : (
+            <div className={`flex flex-col items-center gap-0.5 px-2 py-0.5 rounded-xl ${highlight === t.id ? "bg-primary/10" : ""}`}>
+              <span className="text-base">{t.emoji}</span>
+              <span className={`text-[9px] font-semibold ${highlight === t.id ? "text-primary" : "text-muted-foreground"}`}>{t.label}</span>
+              {highlight === t.id && <div className="w-4 h-0.5 rounded-full bg-primary" />}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function PhoneMock({ children, highlight }: { children: React.ReactNode; highlight?: string }) {
+  return (
+    <div className="mx-auto w-full max-w-[260px]">
+      <div className="rounded-[2rem] border-4 border-foreground/10 bg-card shadow-2xl overflow-hidden">
+        <div className="h-5 bg-primary/10 flex items-center justify-center">
+          <div className="w-14 h-1 bg-foreground/20 rounded-full" />
+        </div>
+        {children}
+        <MockBottomNav highlight={highlight} />
+      </div>
+    </div>
+  )
+}
+
+// ─── Reusable UI pieces ───────────────────────────────────────────────────────
+
+function RangeSelector({ label, options, value, onChange }: {
+  label: string
+  options: { label: string; value: string }[]
+  value: string
+  onChange: (v: string) => void
+}) {
+  return (
+    <div>
+      <p className="text-xs font-semibold text-muted-foreground mb-2">{label}</p>
+      <div className="grid grid-cols-2 gap-1.5">
+        {options.map(o => (
+          <button key={o.value} onClick={() => onChange(o.value)}
+            className={`py-2 px-3 rounded-xl border-2 text-xs font-semibold transition-all text-left ${
+              value === o.value
+                ? "border-primary bg-primary/8 text-primary"
+                : "border-border/50 bg-muted/30 text-muted-foreground"
+            }`}>
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function PrimaryBtn({ onClick, disabled, loading, children }: {
+  onClick: () => void; disabled?: boolean; loading?: boolean; children: React.ReactNode
+}) {
+  return (
+    <button onClick={onClick} disabled={disabled || loading}
+      className="w-full rounded-2xl text-white font-black text-sm disabled:opacity-40 flex items-center justify-center gap-2 py-4"
+      style={{ background: "linear-gradient(135deg,#7c3aed,#6d28d9)" }}>
+      {loading ? "Salvando..." : children}
+    </button>
+  )
+}
+
+function SkipBtn({ onSkip }: { onSkip: () => void }) {
+  return (
+    <button onClick={onSkip} className="w-full text-center text-xs text-muted-foreground py-1 hover:text-foreground transition-colors">
+      Pular por agora →
+    </button>
+  )
+}
+
+function StepTitle({ emoji, title, desc }: { emoji: string; title: string; desc: string }) {
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-1">
+        <span className="text-2xl">{emoji}</span>
+        <h2 className="text-lg font-black leading-tight">{title}</h2>
+      </div>
+      <p className="text-sm text-muted-foreground leading-relaxed">{desc}</p>
+    </div>
+  )
+}
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
+
+const incomeCategories = [
+  { id: "Salário",  emoji: "💼" },
+  { id: "Freela",   emoji: "💻" },
+  { id: "Aluguel",  emoji: "🏘️" },
+  { id: "Outros",   emoji: "💰" },
+]
+const expenseCategories = [
+  { id: "🍔|Comida",      emoji: "🍔", label: "Comida" },
+  { id: "🛒|Mercado",     emoji: "🛒", label: "Mercado" },
+  { id: "🚗|Transporte",  emoji: "🚗", label: "Transporte" },
+  { id: "🏠|Moradia",     emoji: "🏠", label: "Moradia" },
+  { id: "💊|Saúde",       emoji: "💊", label: "Saúde" },
+  { id: "🎮|Lazer",       emoji: "🎮", label: "Lazer" },
+]
+const budgetCategories = [
+  { id: "🍔|Comida",      emoji: "🍔", label: "Comida" },
+  { id: "🛒|Mercado",     emoji: "🛒", label: "Mercado" },
+  { id: "🚗|Transporte",  emoji: "🚗", label: "Transporte" },
+  { id: "🏠|Moradia",     emoji: "🏠", label: "Moradia" },
+  { id: "💊|Saúde",       emoji: "💊", label: "Saúde" },
+  { id: "🎮|Lazer",       emoji: "🎮", label: "Lazer" },
+  { id: "📱|Assinatura",  emoji: "📱", label: "Assinatura" },
+  { id: "📚|Estudo",      emoji: "📚", label: "Estudo" },
+]
+const goalOptions = [
+  { emoji: "✈️", label: "Viagem" },
+  { emoji: "🚗", label: "Carro" },
+  { emoji: "🏠", label: "Imóvel" },
+  { emoji: "💎", label: "Reserva" },
+  { emoji: "📱", label: "Eletrônico" },
+  { emoji: "🎓", label: "Faculdade" },
+  { emoji: "🐾", label: "Pet" },
+  { emoji: "🎁", label: "Outro" },
+]
+const accTypes = [
+  { id: "checking", Icon: Building2, label: "Conta corrente" },
+  { id: "savings",  Icon: PiggyBank,  label: "Poupança" },
+  { id: "wallet",   Icon: Wallet,     label: "Carteira / dinheiro" },
+]
 
 export default function OnboardingPage() {
   const router = useRouter()
-  const [step, setStep]   = useState<Step>(1)
+  const [step, setStep]     = useState<Step>(1)
   const [earned, setEarned] = useState(0)
   const [userId, setUserId] = useState("")
   const [userName, setUserName] = useState("")
-  const [showFlash, setShowFlash] = useState(false)
-  const [lastPts, setLastPts] = useState(0)
+  const [flashPts, setFlashPts] = useState<number | null>(null)
+  const [saving, setSaving] = useState(false)
 
-  // Step 1
-  const [name, setName] = useState("")
-  // Step 2
-  const [accName, setAccName]       = useState("")
-  const [accType, setAccType]       = useState("checking")
-  const [accBalance, setAccBalance] = useState("")
-  const [accSaving, setAccSaving]   = useState(false)
-  // Step 3
-  const [incCat, setIncCat]       = useState(INCOME_CATS[0])
-  const [incAmount, setIncAmount] = useState("")
-  const [incSaving, setIncSaving] = useState(false)
-  // Step 4
-  const [expCat, setExpCat]       = useState(EXPENSE_CATS[0])
-  const [expAmount, setExpAmount] = useState("")
-  const [expSaving, setExpSaving] = useState(false)
-  // Step 5
-  const [budCat, setBudCat]       = useState(BUDGET_CATS[0])
-  const [budAmount, setBudAmount] = useState("")
-  const [budSaving, setBudSaving] = useState(false)
-  // Step 6
-  const [goalName, setGoalName]       = useState("")
-  const [goalAmount, setGoalAmount]   = useState("")
-  const [goalMonthly, setGoalMonthly] = useState("")
-  const [goalSaving, setGoalSaving]   = useState(false)
+  // step 2
+  const [accName, setAccName]   = useState("")
+  const [accType, setAccType]   = useState("checking")
+  const [accRange, setAccRange] = useState("")
+  // step 3
+  const [hasCard, setHasCard]     = useState<boolean | null>(null)
+  const [cardName, setCardName]   = useState("")
+  const [cardLimit, setCardLimit] = useState("")
+  // step 5
+  const [incCat, setIncCat]     = useState("Salário")
+  const [incRange, setIncRange] = useState("")
+  // step 6
+  const [expCat, setExpCat]     = useState("🍔|Comida")
+  const [expRange, setExpRange] = useState("")
+  // step 7
+  const [budCat, setBudCat]     = useState("🍔|Comida")
+  const [budRange, setBudRange] = useState("")
+  // step 8
+  const [goalName, setGoalName]   = useState("")
+  const [goalRange, setGoalRange] = useState("")
 
   useEffect(() => {
     const supabase = createClient()
     supabase.auth.getUser().then(({ data }) => {
       if (!data.user) { router.replace("/login"); return }
       setUserId(data.user.id)
-      const n = (data.user.user_metadata?.full_name as string)?.split(" ")[0] ?? ""
+      const n = (data.user.user_metadata?.full_name as string)?.split(" ")[0] ?? "você"
       setUserName(n)
-      setName(n)
     })
   }, [router])
 
   function flash(pts: number) {
-    setLastPts(pts)
-    setShowFlash(true)
-    setTimeout(() => setShowFlash(false), 1200)
+    setFlashPts(pts)
+    setTimeout(() => setFlashPts(null), 1300)
   }
 
-  function advance(from: Step) {
-    flash(STEP_POINTS[from])
-    setEarned(p => p + STEP_POINTS[from])
+  function advance(from: Step, skip = false) {
+    const pts = skip ? Math.floor(STEP_POINTS[from] / 2) : STEP_POINTS[from]
+    flash(pts)
+    setEarned(p => p + pts)
     setStep((from + 1) as Step)
   }
 
-  async function handleAccount() {
-    if (!accName.trim()) return
-    setAccSaving(true)
-    const supabase = createClient()
-    const balance = parseFloat(accBalance.replace(",", ".")) || 0
-    await supabase.from("accounts").insert({
-      user_id: userId, name: accName.trim(), type: accType,
-      color: "#7c3aed", icon: "bank",
-      initial_balance: balance, current_balance: balance, is_active: true,
-    })
-    setAccSaving(false)
-    advance(2)
+  async function saveAccount(skip = false) {
+    if (!skip && accName.trim()) {
+      setSaving(true)
+      const supabase = createClient()
+      const balanceMap: Record<string, number> = { "ate-1k": 500, "1k-5k": 2500, "5k-15k": 8000, "15k+": 20000 }
+      const bal = balanceMap[accRange] ?? 0
+      await supabase.from("accounts").insert({
+        user_id: userId, name: accName.trim(), type: accType,
+        color: "#7c3aed", icon: "bank",
+        initial_balance: bal, current_balance: bal, is_active: true,
+      })
+      setSaving(false)
+    }
+    advance(2, skip)
   }
 
-  async function handleIncome() {
-    const parsed = parseFloat(incAmount.replace(",", "."))
-    if (!parsed || parsed <= 0) return
-    setIncSaving(true)
-    const supabase = createClient()
-    const today = new Date().toISOString().split("T")[0]
-    await supabase.from("transactions").insert({
-      user_id: userId, type: "income",
-      description: incCat.label, amount: parsed, date: today,
-      status: "confirmed", notes: `${incCat.emoji}|${incCat.label}`,
-      tags: [], is_recurring: false,
-    })
-    setIncSaving(false)
-    advance(3)
+  async function saveCard(skip = false) {
+    if (!skip && hasCard && cardName.trim()) {
+      setSaving(true)
+      const supabase = createClient()
+      const limitMap: Record<string, number> = { "ate-2k": 1000, "2k-5k": 3000, "5k-10k": 7000, "10k+": 15000 }
+      await supabase.from("accounts").insert({
+        user_id: userId, name: cardName.trim(), type: "credit",
+        color: "#6d28d9", icon: "credit-card",
+        initial_balance: 0, current_balance: 0, is_active: true,
+        credit_limit: limitMap[cardLimit] ?? 0,
+      })
+      setSaving(false)
+    }
+    advance(3, skip)
   }
 
-  async function handleExpense() {
-    const parsed = parseFloat(expAmount.replace(",", "."))
-    if (!parsed || parsed <= 0) return
-    setExpSaving(true)
-    const supabase = createClient()
-    const today = new Date().toISOString().split("T")[0]
-    const { data: accs } = await supabase.from("accounts").select("id").eq("is_active", true).limit(1)
-    await supabase.from("transactions").insert({
-      user_id: userId, type: "expense",
-      description: expCat.label, amount: parsed, date: today,
-      account_id: accs?.[0]?.id ?? null, status: "confirmed",
-      notes: `${expCat.emoji}|${expCat.label}`,
-      tags: [], is_recurring: false,
-    })
-    setExpSaving(false)
-    advance(4)
+  async function saveIncome(skip = false) {
+    if (!skip && incRange) {
+      setSaving(true)
+      const supabase = createClient()
+      const valMap: Record<string, number> = { "ate-2k": 1500, "2k-5k": 3500, "5k-10k": 7500, "10k+": 12000 }
+      const emojis: Record<string, string> = { Salário: "💼", Freela: "💻", Aluguel: "🏘️", Outros: "💰" }
+      const today = new Date().toISOString().split("T")[0]
+      await supabase.from("transactions").insert({
+        user_id: userId, type: "income", description: incCat,
+        amount: valMap[incRange] ?? 1000, date: today, status: "confirmed",
+        notes: `${emojis[incCat] ?? "💰"}|${incCat}`, tags: [], is_recurring: false,
+      })
+      setSaving(false)
+    }
+    advance(5, skip)
   }
 
-  async function handleBudget() {
-    const val = parseFloat(budAmount.replace(",", "."))
-    if (!val || val <= 0) return
-    setBudSaving(true)
-    const supabase = createClient()
-    const now = new Date()
-    await supabase.from("budget_limits").insert({
-      user_id: userId, category_key: budCat.id, category_label: budCat.id,
-      emoji: budCat.emoji, amount_limit: val,
-      month: now.getMonth() + 1, year: now.getFullYear(),
-    })
-    setBudSaving(false)
-    advance(5)
+  async function saveExpense(skip = false) {
+    if (!skip && expRange) {
+      setSaving(true)
+      const supabase = createClient()
+      const valMap: Record<string, number> = { "ate-50": 30, "50-200": 100, "200-500": 300, "500+": 700 }
+      const today = new Date().toISOString().split("T")[0]
+      const [emoji, label] = expCat.split("|")
+      const { data: accs } = await supabase.from("accounts").select("id").eq("user_id", userId).eq("is_active", true).limit(1)
+      await supabase.from("transactions").insert({
+        user_id: userId, type: "expense", description: label,
+        amount: valMap[expRange] ?? 50, date: today,
+        account_id: accs?.[0]?.id ?? null, status: "confirmed",
+        notes: `${emoji}|${label}`, tags: [], is_recurring: false,
+      })
+      setSaving(false)
+    }
+    advance(6, skip)
   }
 
-  async function handleGoal() {
-    const target = parseFloat(goalAmount.replace(",", "."))
-    if (!goalName.trim() || !target) return
-    setGoalSaving(true)
-    const supabase = createClient()
-    const monthly = parseFloat(goalMonthly.replace(",", ".")) || 0
-    await supabase.from("goals").insert({
-      user_id: userId, name: goalName.trim(), type: "savings",
-      target_amount: target, current_amount: 0,
-      monthly_contribution: monthly, priority: "high",
-    })
-    setGoalSaving(false)
-    advance(6)
+  async function saveBudget(skip = false) {
+    if (!skip && budRange) {
+      setSaving(true)
+      const supabase = createClient()
+      const valMap: Record<string, number> = { "ate-300": 200, "300-800": 500, "800-2k": 1200, "2k+": 3000 }
+      const now = new Date()
+      const [emoji, label] = budCat.split("|")
+      await supabase.from("budget_limits").insert({
+        user_id: userId, category_key: label, category_label: label, emoji,
+        amount_limit: valMap[budRange] ?? 300,
+        month: now.getMonth() + 1, year: now.getFullYear(),
+      })
+      setSaving(false)
+    }
+    advance(7, skip)
+  }
+
+  async function saveGoal(skip = false) {
+    if (!skip && goalName.trim() && goalRange) {
+      setSaving(true)
+      const supabase = createClient()
+      const valMap: Record<string, number> = { "ate-2k": 1000, "2k-10k": 5000, "10k-50k": 25000, "50k+": 80000 }
+      await supabase.from("goals").insert({
+        user_id: userId, name: goalName.trim(), type: "savings",
+        target_amount: valMap[goalRange] ?? 2000,
+        current_amount: 0, monthly_contribution: 0, priority: "high",
+      })
+      setSaving(false)
+    }
+    advance(8, skip)
   }
 
   async function finish() {
-    flash(STEP_POINTS[7])
+    flash(STEP_POINTS[9])
     const supabase = createClient()
     await supabase.auth.updateUser({ data: { onboarding_done: true } })
     setTimeout(() => router.replace("/dashboard"), 1800)
   }
 
-  const progress = ((step - 1) / TOTAL_STEPS) * 100
+  const progress = ((step - 1) / (TOTAL_STEPS - 1)) * 100
+  const budCatLabel = budCat.split("|")[1] ?? budCat
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background to-primary/5 flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-md relative">
+    <div className="min-h-screen flex flex-col items-center bg-gradient-to-b from-primary/5 to-background px-4 py-6 overflow-y-auto">
+      <div className="w-full max-w-md space-y-4 pb-8">
 
-        {/* Points flash */}
+        {/* Flash de pontos */}
         <AnimatePresence>
-          {showFlash && (
-            <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-              className="absolute -top-10 right-0 bg-amber-400 text-amber-900 text-sm font-black px-4 py-1.5 rounded-full shadow-lg z-10">
-              +{lastPts} pts ⭐
+          {flashPts !== null && (
+            <motion.div initial={{ opacity: 0, y: -12, scale: 0.9 }} animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -8 }}
+              className="fixed top-4 right-4 z-50 bg-amber-400 text-amber-900 text-sm font-black px-4 py-2 rounded-full shadow-lg pointer-events-none">
+              +{flashPts} pts ⭐
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* Progress */}
-        {step < 7 && (
-          <div className="mb-6">
-            <div className="flex items-center justify-between text-xs text-muted-foreground mb-2">
+        {/* Progresso */}
+        {step < TOTAL_STEPS && (
+          <div>
+            <div className="flex justify-between text-xs text-muted-foreground mb-2">
               <span>Etapa {step} de {TOTAL_STEPS - 1}</span>
               <span className="font-semibold text-primary">{earned} pts ganhos</span>
             </div>
-            <div className="h-1.5 bg-muted rounded-full">
-              <motion.div className="h-full rounded-full" style={{ background: "linear-gradient(90deg,#7c3aed,#a855f7)" }}
-                animate={{ width: `${progress}%` }} transition={{ duration: 0.4 }} />
-            </div>
-            <div className="flex gap-1 mt-2">
-              {Array.from({ length: TOTAL_STEPS - 1 }).map((_, i) => (
-                <div key={i} className={`h-1 rounded-full flex-1 transition-all ${i < step ? "bg-primary" : "bg-muted"}`} />
-              ))}
+            <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+              <motion.div className="h-full rounded-full"
+                style={{ background: "linear-gradient(90deg,#7c3aed,#a855f7)" }}
+                animate={{ width: `${progress}%` }} transition={{ duration: 0.35 }} />
             </div>
           </div>
         )}
 
         <AnimatePresence mode="wait">
 
-          {/* ── STEP 1: Welcome ── */}
+          {/* ── ETAPA 1: Boas-vindas ── */}
           {step === 1 && (
-            <motion.div key="s1" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }}
-              className="bg-card rounded-3xl shadow-xl p-6 space-y-5">
-              <div className="text-center space-y-3">
-                <div className="text-6xl">👋</div>
-                <h2 className="text-2xl font-black">Bem-vindo ao<br />Conta Comigo!</h2>
-                <p className="text-muted-foreground text-sm leading-relaxed">
-                  Chega de chegar no fim do mês sem saber pra onde foi o dinheiro.
-                  Em <strong className="text-foreground">menos de 3 minutos</strong> você vai ter controle total das suas finanças.
-                </p>
-              </div>
-              <div className="space-y-2">
-                {[["📊","Veja exatamente quanto pode gastar hoje"],["🎮","Ganhe pontos organizando as finanças"],["🔔","Nunca mais esqueça um vencimento"]].map(([e,t]) => (
-                  <div key={t} className="flex items-center gap-3 bg-muted/50 rounded-2xl px-4 py-3">
-                    <span className="text-xl">{e}</span><span className="text-sm font-medium">{t}</span>
+            <motion.div key="s1" initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -40 }} className="bg-card rounded-3xl shadow-xl overflow-hidden">
+
+              {/* Mockup */}
+              <div className="bg-primary/5 p-4">
+                <PhoneMock highlight="home">
+                  <div className="px-3 py-2 bg-primary/5">
+                    <p className="text-[9px] text-muted-foreground">Bem-vindo ao</p>
+                    <p className="text-sm font-black">Conta Comigo 👋</p>
                   </div>
-                ))}
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground mb-2">Como você quer ser chamado?</p>
-                <Input value={name} onChange={e => setName(e.target.value)} placeholder="Seu primeiro nome"
-                  className="rounded-2xl h-12 text-base" onKeyDown={e => { if (e.key === "Enter" && name.trim()) advance(1) }} />
-              </div>
-              <button onClick={() => name.trim() && advance(1)} disabled={!name.trim()}
-                className="w-full h-14 rounded-2xl text-white font-black text-base disabled:opacity-40 flex items-center justify-center gap-2"
-                style={{ background: "linear-gradient(135deg,#7c3aed,#6d28d9)" }}>
-                Vamos lá, {name || "..."} 🚀 <span className="text-xs opacity-70 font-normal">+10pts</span>
-              </button>
-            </motion.div>
-          )}
-
-          {/* ── STEP 2: Account ── */}
-          {step === 2 && (
-            <motion.div key="s2" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }}
-              className="bg-card rounded-3xl shadow-xl p-6 space-y-5">
-              <div>
-                <h2 className="text-xl font-black mb-1">🏦 Onde fica seu dinheiro?</h2>
-                <p className="text-sm text-muted-foreground">Crie sua primeira conta para controlar o saldo.</p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground mb-2">Tipo de conta</p>
-                <div className="grid grid-cols-3 gap-2">
-                  {ACCOUNT_TYPES.map(t => (
-                    <button key={t.id} onClick={() => setAccType(t.id)}
-                      className={`flex flex-col items-center gap-1.5 p-3 rounded-2xl border-2 text-xs font-semibold transition-all ${accType === t.id ? "border-primary bg-primary/8 text-primary" : "border-border/60 bg-muted/30 text-muted-foreground"}`}>
-                      <span className="text-2xl">{t.emoji}</span>{t.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground mb-2">Nome da conta</p>
-                <Input value={accName} onChange={e => setAccName(e.target.value)}
-                  placeholder={accType === "wallet" ? "Carteira" : "Nubank, Itaú, BTG..."}
-                  className="rounded-2xl h-12" />
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground mb-2">Saldo atual <span className="font-normal opacity-60">(quanto tem agora?)</span></p>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground font-bold text-sm">R$</span>
-                  <Input value={accBalance} onChange={e => setAccBalance(e.target.value)} inputMode="decimal" placeholder="0,00"
-                    className="pl-10 rounded-2xl h-12 font-bold" />
-                </div>
-              </div>
-              <button onClick={handleAccount} disabled={!accName.trim() || accSaving}
-                className="w-full h-14 rounded-2xl text-white font-black text-base disabled:opacity-40 flex items-center justify-center gap-2"
-                style={{ background: "linear-gradient(135deg,#7c3aed,#6d28d9)" }}>
-                {accSaving ? "Criando..." : <> Criar conta 🏦 <span className="text-xs opacity-70 font-normal">+20pts</span> </>}
-              </button>
-            </motion.div>
-          )}
-
-          {/* ── STEP 3: Income ── */}
-          {step === 3 && (
-            <motion.div key="s3" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }}
-              className="bg-card rounded-3xl shadow-xl p-6 space-y-5">
-              <div>
-                <h2 className="text-xl font-black mb-1">💚 Quanto você recebe?</h2>
-                <p className="text-sm text-muted-foreground">Registre sua renda deste mês. Isso define seu "dinheiro livre".</p>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                {INCOME_CATS.map(c => (
-                  <button key={c.id} onClick={() => setIncCat(c)}
-                    className={`flex items-center gap-2 p-3 rounded-2xl border-2 text-xs font-semibold transition-all ${incCat.id === c.id ? "border-green-400 bg-green-50 text-green-700" : "border-border/60 bg-muted/30 text-muted-foreground"}`}>
-                    <span className="text-xl">{c.emoji}</span>{c.label}
-                  </button>
-                ))}
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground mb-2">Valor recebido este mês</p>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground font-bold text-sm">R$</span>
-                  <Input autoFocus value={incAmount} onChange={e => setIncAmount(e.target.value)} inputMode="decimal" placeholder="0,00"
-                    onKeyDown={e => { if (e.key === "Enter") handleIncome() }}
-                    className="pl-10 rounded-2xl h-14 text-2xl font-black" />
-                </div>
-              </div>
-              <button onClick={handleIncome} disabled={!incAmount || incSaving}
-                className="w-full h-14 rounded-2xl text-white font-black text-base disabled:opacity-40 flex items-center justify-center gap-2"
-                style={{ background: "linear-gradient(135deg,#059669,#047857)" }}>
-                {incSaving ? "Registrando..." : <> Anotar renda 💚 <span className="text-xs opacity-70 font-normal">+20pts</span> </>}
-              </button>
-            </motion.div>
-          )}
-
-          {/* ── STEP 4: Expense ── */}
-          {step === 4 && (
-            <motion.div key="s4" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }}
-              className="bg-card rounded-3xl shadow-xl p-6 space-y-5">
-              <div>
-                <h2 className="text-xl font-black mb-1">🔴 Registre um gasto</h2>
-                <p className="text-sm text-muted-foreground">Pense em algo que você gastou hoje ou ontem. Qualquer coisa!</p>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                {EXPENSE_CATS.map(c => (
-                  <button key={c.id} onClick={() => setExpCat(c)}
-                    className={`flex flex-col items-center gap-1 p-2.5 rounded-2xl border-2 text-[11px] font-semibold transition-all ${expCat.id === c.id ? "border-primary bg-primary/8 text-primary" : "border-border/60 bg-muted/30 text-muted-foreground"}`}>
-                    <span className="text-xl">{c.emoji}</span>{c.label}
-                  </button>
-                ))}
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground mb-2">Quanto gastou?</p>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground font-bold text-sm">R$</span>
-                  <Input autoFocus value={expAmount} onChange={e => setExpAmount(e.target.value)} inputMode="decimal" placeholder="0,00"
-                    onKeyDown={e => { if (e.key === "Enter") handleExpense() }}
-                    className="pl-10 rounded-2xl h-14 text-2xl font-black" />
-                </div>
-              </div>
-              <button onClick={handleExpense} disabled={!expAmount || expSaving}
-                className="w-full h-14 rounded-2xl text-white font-black text-base disabled:opacity-40 flex items-center justify-center gap-2"
-                style={{ background: "linear-gradient(135deg,#7c3aed,#6d28d9)" }}>
-                {expSaving ? "Registrando..." : <> Registrar gasto 🔴 <span className="text-xs opacity-70 font-normal">+10pts</span> </>}
-              </button>
-            </motion.div>
-          )}
-
-          {/* ── STEP 5: Budget ── */}
-          {step === 5 && (
-            <motion.div key="s5" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }}
-              className="bg-card rounded-3xl shadow-xl p-6 space-y-5">
-              <div>
-                <h2 className="text-xl font-black mb-1">🎯 Defina um teto de gastos</h2>
-                <p className="text-sm text-muted-foreground">O app te avisa quando estiver chegando no limite da categoria.</p>
-              </div>
-              <div className="grid grid-cols-4 gap-2">
-                {BUDGET_CATS.map(c => (
-                  <button key={c.id} onClick={() => setBudCat(c)}
-                    className={`flex flex-col items-center gap-1 p-2 rounded-2xl border-2 text-[10px] font-semibold transition-all ${budCat.id === c.id ? "border-primary bg-primary/8 text-primary" : "border-border/60 bg-muted/30 text-muted-foreground"}`}>
-                    <span className="text-xl">{c.emoji}</span>
-                    <span className="truncate w-full text-center">{c.id}</span>
-                  </button>
-                ))}
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground mb-2">Limite mensal para {budCat.emoji} {budCat.id}</p>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground font-bold text-sm">R$</span>
-                  <Input autoFocus value={budAmount} onChange={e => setBudAmount(e.target.value)} inputMode="decimal" placeholder="ex: 500,00"
-                    onKeyDown={e => { if (e.key === "Enter") handleBudget() }}
-                    className="pl-10 rounded-2xl h-14 text-2xl font-black" />
-                </div>
-              </div>
-              <button onClick={handleBudget} disabled={!budAmount || budSaving}
-                className="w-full h-14 rounded-2xl text-white font-black text-base disabled:opacity-40 flex items-center justify-center gap-2"
-                style={{ background: "linear-gradient(135deg,#7c3aed,#6d28d9)" }}>
-                {budSaving ? "Salvando..." : <> Definir limite 🎯 <span className="text-xs opacity-70 font-normal">+40pts</span> </>}
-              </button>
-            </motion.div>
-          )}
-
-          {/* ── STEP 6: Goal ── */}
-          {step === 6 && (
-            <motion.div key="s6" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }}
-              className="bg-card rounded-3xl shadow-xl p-6 space-y-5">
-              <div>
-                <h2 className="text-xl font-black mb-1">✈️ Qual é o seu sonho?</h2>
-                <p className="text-sm text-muted-foreground">Defina uma meta e acompanhe o progresso mês a mês.</p>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                {[["✈️","Viagem"],["🚗","Carro"],["🏠","Imóvel"],["💎","Reserva"],["📱","Eletrônico"],["🎓","Educação"]].map(([e,l]) => (
-                  <button key={l} onClick={() => setGoalName(l as string)}
-                    className={`flex flex-col items-center gap-1 p-2.5 rounded-2xl border-2 text-xs font-semibold transition-all ${goalName === l ? "border-primary bg-primary/8 text-primary" : "border-border/60 bg-muted/30 text-muted-foreground"}`}>
-                    <span className="text-2xl">{e}</span>{l}
-                  </button>
-                ))}
-              </div>
-              <Input value={goalName} onChange={e => setGoalName(e.target.value)} placeholder="ou escreva o nome do sonho..."
-                className="rounded-2xl h-11 text-sm" />
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <p className="text-xs font-semibold text-muted-foreground mb-1.5">Quanto custa?</p>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-bold text-xs">R$</span>
-                    <Input value={goalAmount} onChange={e => setGoalAmount(e.target.value)} inputMode="decimal" placeholder="0,00"
-                      className="pl-8 rounded-2xl h-11 font-bold text-sm" />
+                  <div className="px-3 py-2 space-y-1.5">
+                    <div className="h-12 rounded-xl bg-primary/10 flex items-center px-3 gap-2">
+                      <span className="text-lg">💰</span>
+                      <div>
+                        <p className="text-[9px] text-muted-foreground">Disponível hoje</p>
+                        <p className="text-sm font-black text-primary">Vamos configurar!</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1">
+                      {["📊 Score","🎯 Meta","📋 Limites"].map(l => (
+                        <div key={l} className="h-8 rounded-lg bg-muted/60 flex items-center justify-center text-[8px] font-semibold text-muted-foreground">{l}</div>
+                      ))}
+                    </div>
                   </div>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold text-muted-foreground mb-1.5">Poupar/mês</p>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-bold text-xs">R$</span>
-                    <Input value={goalMonthly} onChange={e => setGoalMonthly(e.target.value)} inputMode="decimal" placeholder="0,00"
-                      className="pl-8 rounded-2xl h-11 font-bold text-sm" />
-                  </div>
-                </div>
+                </PhoneMock>
               </div>
-              {goalName && goalAmount && goalMonthly && (
-                <div className="bg-primary/8 border border-primary/20 rounded-2xl px-4 py-2.5 text-xs text-primary font-semibold">
-                  ✨ Meta em aprox. {Math.ceil(parseFloat(goalAmount.replace(",",".") || "0") / (parseFloat(goalMonthly.replace(",",".") || "1") || 1))} meses
-                </div>
-              )}
-              <button onClick={handleGoal} disabled={!goalName.trim() || !goalAmount || goalSaving}
-                className="w-full h-14 rounded-2xl text-white font-black text-base disabled:opacity-40 flex items-center justify-center gap-2"
-                style={{ background: "linear-gradient(135deg,#7c3aed,#6d28d9)" }}>
-                {goalSaving ? "Salvando..." : <> Criar meta ✈️ <span className="text-xs opacity-70 font-normal">+50pts</span> </>}
-              </button>
-            </motion.div>
-          )}
 
-          {/* ── STEP 7: Done ── */}
-          {step === 7 && (
-            <motion.div key="s7" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
-              className="bg-card rounded-3xl shadow-xl p-6 space-y-5 text-center">
-              <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", delay: 0.1 }}>
-                <div className="text-7xl mb-2">🏆</div>
-              </motion.div>
-              <div>
-                <h2 className="text-2xl font-black mb-2">Setup completo!</h2>
-                <p className="text-sm text-muted-foreground">
-                  {name || userName}, você acabou de desbloquear o controle financeiro que vai mudar o fim do seu mês.
-                </p>
-              </div>
-              <div className="rounded-2xl p-4 space-y-2" style={{ background: "rgba(124,58,237,0.08)", border: "1px solid rgba(124,58,237,0.2)" }}>
-                <p className="text-3xl font-black text-primary">{earned + STEP_POINTS[7]} pts</p>
-                <p className="text-xs text-muted-foreground">ganhos nessa sessão ⭐</p>
-                <div className="grid grid-cols-2 gap-1.5 text-xs text-left mt-2">
-                  {[["🏦","Conta criada"],["💚","Renda registrada"],["🔴","Gasto lançado"],["🎯","Limite definido"],["✈️","Meta criada"],["🏆","Setup completo"]].map(([e,l]) => (
-                    <div key={l} className="flex items-center gap-1.5 text-muted-foreground">
-                      <Check className="size-3 text-green-500 shrink-0" />{e} {l}
+              <div className="p-5 space-y-4">
+                <div className="text-center space-y-2">
+                  <h2 className="text-2xl font-black">Olá, {userName}! 🎉</h2>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    Vou te mostrar cada parte do app enquanto a gente configura tudo juntos.
+                    <strong className="text-foreground"> Vai levar menos de 3 minutos!</strong>
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  {[
+                    ["🗺️", "Você vai ver exatamente onde fica cada coisa"],
+                    ["💡", "Decide o que quer preencher — sem pressão"],
+                    ["⭐", "Ganha pontos a cada etapa concluída"],
+                  ].map(([e, t]) => (
+                    <div key={t} className="flex items-center gap-3 bg-muted/40 rounded-2xl px-4 py-2.5">
+                      <span className="text-xl">{e}</span>
+                      <span className="text-sm font-medium">{t}</span>
                     </div>
                   ))}
                 </div>
+                <PrimaryBtn onClick={() => advance(1)}>
+                  Vamos lá! 🚀 <span className="text-xs opacity-70 font-normal">+10 pts</span>
+                </PrimaryBtn>
               </div>
-              <div className="space-y-2 text-sm text-left">
-                <p className="font-bold text-xs text-muted-foreground uppercase tracking-wide">O que fazer agora:</p>
-                {[["+ Lançar","registre gastos do dia a dia"],["Planejar","orçamento e próximos vencimentos"],["Início","seu score e missões semanais"]].map(([a,d]) => (
-                  <div key={a} className="flex items-center gap-2.5 bg-muted/50 rounded-xl px-3 py-2.5">
-                    <ChevronRight className="size-4 text-primary shrink-0" />
-                    <span><strong className="text-foreground">{a}</strong> — {d}</span>
+            </motion.div>
+          )}
+
+          {/* ── ETAPA 2: Conta bancária ── */}
+          {step === 2 && (
+            <motion.div key="s2" initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -40 }} className="bg-card rounded-3xl shadow-xl overflow-hidden">
+
+              <div className="bg-primary/5 p-4">
+                <p className="text-[10px] font-bold text-primary text-center mb-2 uppercase tracking-wide">📍 Aqui no app → Aba Contas</p>
+                <PhoneMock highlight="cards">
+                  <div className="px-3 py-2 bg-primary/5">
+                    <p className="text-[9px] text-muted-foreground">Aba Contas →</p>
+                    <p className="text-sm font-black">Minhas Contas</p>
                   </div>
-                ))}
+                  <div className="px-3 py-2 space-y-1.5">
+                    <motion.div
+                      animate={{ boxShadow: ["0 0 0 0 rgba(124,58,237,0)", "0 0 0 4px rgba(124,58,237,0.3)", "0 0 0 0 rgba(124,58,237,0)"] }}
+                      transition={{ repeat: Infinity, duration: 2 }}
+                      className="h-14 rounded-xl border-2 border-primary/40 bg-primary/8 flex items-center px-3 gap-2">
+                      <Building2 className="size-5 text-primary" />
+                      <div>
+                        <p className="text-[9px] text-muted-foreground">Sua conta vai aparecer aqui</p>
+                        <p className="text-xs font-black text-primary">+ Adicionar conta</p>
+                      </div>
+                    </motion.div>
+                    <div className="h-7 rounded-xl bg-muted/30 flex items-center px-3">
+                      <span className="text-[9px] text-muted-foreground">💳 Cartão → próxima etapa</span>
+                    </div>
+                  </div>
+                </PhoneMock>
               </div>
-              <button onClick={finish}
-                className="w-full h-14 rounded-2xl text-white font-black text-base flex items-center justify-center gap-2"
-                style={{ background: "linear-gradient(135deg,#7c3aed,#6d28d9)" }}>
-                Entrar no app 🚀 <span className="text-xs opacity-70 font-normal">+50pts</span>
-              </button>
+
+              <div className="p-5 space-y-4">
+                <StepTitle emoji="🏦" title="Onde fica seu dinheiro?"
+                  desc="Na aba Contas você vê o saldo de tudo num lugar só — banco, poupança, carteira. O app soma automaticamente e mostra quanto você tem disponível." />
+
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground mb-2">Que tipo de conta você usa mais?</p>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {accTypes.map(({ id, Icon, label }) => (
+                      <button key={id} onClick={() => setAccType(id)}
+                        className={`flex flex-col items-center gap-1 p-2.5 rounded-2xl border-2 text-[10px] font-semibold transition-all ${accType === id ? "border-primary bg-primary/8 text-primary" : "border-border/50 bg-muted/30 text-muted-foreground"}`}>
+                        <Icon className="size-5" />
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground mb-2">Como você chama essa conta?</p>
+                  <input value={accName} onChange={e => setAccName(e.target.value)}
+                    placeholder={accType === "wallet" ? "ex: Carteira" : "ex: Nubank, Itaú, Inter..."}
+                    className="w-full h-11 rounded-2xl border border-border/60 bg-muted/20 px-4 text-sm font-medium outline-none focus:border-primary transition-colors" />
+                </div>
+
+                <RangeSelector
+                  label="Mais ou menos quanto tem nessa conta hoje? (totalmente opcional!)"
+                  value={accRange}
+                  onChange={setAccRange}
+                  options={[
+                    { label: "Até R$ 1.000", value: "ate-1k" },
+                    { label: "R$ 1k – R$ 5k", value: "1k-5k" },
+                    { label: "R$ 5k – R$ 15k", value: "5k-15k" },
+                    { label: "R$ 15k ou mais", value: "15k+" },
+                  ]}
+                />
+                <p className="text-[11px] text-muted-foreground text-center -mt-2">
+                  Não precisa ser o valor exato — uma faixa já ajuda o app 😊
+                </p>
+
+                <PrimaryBtn onClick={() => saveAccount(false)} disabled={!accName.trim()} loading={saving}>
+                  Criar minha conta 🏦 <span className="text-xs opacity-70 font-normal">+20 pts</span>
+                </PrimaryBtn>
+                <SkipBtn onSkip={() => saveAccount(true)} />
+              </div>
+            </motion.div>
+          )}
+
+          {/* ── ETAPA 3: Cartão de crédito ── */}
+          {step === 3 && (
+            <motion.div key="s3" initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -40 }} className="bg-card rounded-3xl shadow-xl overflow-hidden">
+
+              <div className="bg-primary/5 p-4">
+                <p className="text-[10px] font-bold text-primary text-center mb-2 uppercase tracking-wide">📍 Aqui no app → Aba Contas → Cartões</p>
+                <PhoneMock highlight="cards">
+                  <div className="px-3 py-2 bg-primary/5">
+                    <p className="text-[9px] text-muted-foreground">Aba Contas →</p>
+                    <p className="text-sm font-black">Meus Cartões</p>
+                  </div>
+                  <div className="px-3 py-2 space-y-1.5">
+                    <motion.div
+                      animate={{ boxShadow: ["0 0 0 0 rgba(124,58,237,0)", "0 0 0 4px rgba(124,58,237,0.3)", "0 0 0 0 rgba(124,58,237,0)"] }}
+                      transition={{ repeat: Infinity, duration: 2 }}
+                      className="h-16 rounded-xl p-2.5 flex flex-col justify-between"
+                      style={{ background: "linear-gradient(135deg,#7c3aed,#4c1d95)" }}>
+                      <div className="flex justify-between items-start">
+                        <CreditCard className="size-3.5 text-white/70" />
+                        <span className="text-[9px] text-white/60 font-semibold">CRÉDITO</span>
+                      </div>
+                      <div>
+                        <p className="text-[8px] text-white/60">Fatura atual</p>
+                        <p className="text-xs font-black text-white">R$ 0,00</p>
+                      </div>
+                    </motion.div>
+                    <div className="h-7 rounded-xl bg-amber-50 border border-amber-200 flex items-center px-2">
+                      <span className="text-[9px] text-amber-700 font-semibold">💳 Botão "Pagar fatura" aparece aqui</span>
+                    </div>
+                  </div>
+                </PhoneMock>
+              </div>
+
+              <div className="p-5 space-y-4">
+                <StepTitle emoji="💳" title="Você usa cartão de crédito?"
+                  desc="Se sim, o app acompanha seus gastos no cartão separado do saldo da conta. Toda vez que você gastar no cartão, registra aqui. Na virada do mês, aparece um botão para pagar a fatura." />
+
+                <div className="bg-blue-50 border border-blue-200 rounded-2xl px-4 py-2.5">
+                  <p className="text-xs text-blue-700 font-medium">
+                    💡 <strong>Conta</strong> = dinheiro que você já tem.<br />
+                    <strong>Cartão</strong> = dinheiro que você ainda vai pagar.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  {[{ v: true, label: "✅ Sim, uso cartão" }, { v: false, label: "❌ Não uso cartão" }].map(o => (
+                    <button key={String(o.v)} onClick={() => setHasCard(o.v)}
+                      className={`py-3 rounded-2xl border-2 text-sm font-semibold transition-all ${hasCard === o.v ? "border-primary bg-primary/8 text-primary" : "border-border/50 bg-muted/30 text-muted-foreground"}`}>
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+
+                <AnimatePresence>
+                  {hasCard === true && (
+                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }} className="space-y-3 overflow-hidden">
+                      <div>
+                        <p className="text-xs font-semibold text-muted-foreground mb-2">Qual é o nome do seu cartão?</p>
+                        <input value={cardName} onChange={e => setCardName(e.target.value)}
+                          placeholder="ex: Nubank, Itaú Platinum, C6..."
+                          className="w-full h-11 rounded-2xl border border-border/60 bg-muted/20 px-4 text-sm font-medium outline-none focus:border-primary transition-colors" />
+                      </div>
+                      <RangeSelector
+                        label="Qual é o limite do cartão? (opcional — só pra estimar)"
+                        value={cardLimit}
+                        onChange={setCardLimit}
+                        options={[
+                          { label: "Até R$ 2.000",   value: "ate-2k" },
+                          { label: "R$ 2k – R$ 5k",  value: "2k-5k" },
+                          { label: "R$ 5k – R$ 10k", value: "5k-10k" },
+                          { label: "R$ 10k ou mais", value: "10k+" },
+                        ]}
+                      />
+                      <p className="text-[11px] text-muted-foreground text-center">
+                        🔒 Não pedimos número do cartão nem dados do banco. Isso fica só aqui!
+                      </p>
+                    </motion.div>
+                  )}
+                  {hasCard === false && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                      className="bg-muted/40 rounded-2xl px-4 py-3 text-sm text-muted-foreground text-center">
+                      Tudo bem! Se um dia quiser adicionar, é só ir na aba Contas 😊
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                <PrimaryBtn
+                  onClick={() => saveCard(false)}
+                  disabled={hasCard === null || (hasCard === true && !cardName.trim())}
+                  loading={saving}>
+                  {hasCard === false
+                    ? "Continuar sem cartão →"
+                    : <> Adicionar cartão 💳 <span className="text-xs opacity-70 font-normal">+20 pts</span> </>}
+                </PrimaryBtn>
+                <SkipBtn onSkip={() => saveCard(true)} />
+              </div>
+            </motion.div>
+          )}
+
+          {/* ── ETAPA 4: O botão + ── */}
+          {step === 4 && (
+            <motion.div key="s4" initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -40 }} className="bg-card rounded-3xl shadow-xl overflow-hidden">
+
+              <div className="bg-primary/5 p-4">
+                <p className="text-[10px] font-bold text-primary text-center mb-2 uppercase tracking-wide">📍 Esse botão aqui embaixo</p>
+                <PhoneMock highlight="add">
+                  <div className="px-3 py-2 bg-primary/5">
+                    <p className="text-sm font-black">Lançar transação</p>
+                  </div>
+                  <div className="px-3 py-2 space-y-1.5">
+                    <div className="grid grid-cols-2 gap-1">
+                      <div className="h-8 rounded-xl bg-green-100 border-2 border-green-400 flex items-center justify-center">
+                        <span className="text-[10px] font-black text-green-700">💚 Entrou dinheiro</span>
+                      </div>
+                      <div className="h-8 rounded-xl bg-red-100 border-2 border-red-300 flex items-center justify-center">
+                        <span className="text-[10px] font-black text-red-700">🔴 Saiu dinheiro</span>
+                      </div>
+                    </div>
+                    <div className="h-9 rounded-xl bg-muted/30 flex items-center justify-center px-3">
+                      <span className="text-[9px] text-muted-foreground">👆 Toca na categoria → digita o valor → salvo!</span>
+                    </div>
+                    <div className="h-7 rounded-xl bg-primary/10 flex items-center justify-center">
+                      <span className="text-[10px] font-black text-primary">✅ Pronto em menos de 10 segundos</span>
+                    </div>
+                  </div>
+                </PhoneMock>
+              </div>
+
+              <div className="p-5 space-y-4">
+                <StepTitle emoji="➕" title="O coração do app: o botão +"
+                  desc="Sempre que gastar ou receber dinheiro, você usa esse botão roxo no centro da tela. Simples assim — menos de 10 segundos por lançamento!" />
+
+                <div className="space-y-2">
+                  {[
+                    ["💚", "Aba verde → dinheiro que entrou (salário, freela, Pix recebido...)"],
+                    ["🔴", "Aba vermelha → dinheiro que saiu (compra, conta, transferência...)"],
+                    ["📅", "Dá pra registrar datas passadas também — não precisa ser agora"],
+                  ].map(([e, t]) => (
+                    <div key={t} className="flex items-start gap-3 bg-muted/40 rounded-2xl px-4 py-2.5">
+                      <span className="text-xl mt-0.5">{e}</span>
+                      <span className="text-sm leading-snug">{t}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <p className="text-xs text-center text-muted-foreground bg-amber-50 border border-amber-200 rounded-2xl px-4 py-2.5">
+                  💡 Nas próximas etapas você vai usar esse botão pela primeira vez, com a gente guiando!
+                </p>
+
+                <PrimaryBtn onClick={() => advance(4)}>
+                  Entendi! Vamos continuar →
+                </PrimaryBtn>
+              </div>
+            </motion.div>
+          )}
+
+          {/* ── ETAPA 5: Renda ── */}
+          {step === 5 && (
+            <motion.div key="s5" initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -40 }} className="bg-card rounded-3xl shadow-xl overflow-hidden">
+
+              <div className="bg-green-50/60 p-4">
+                <p className="text-[10px] font-bold text-green-700 text-center mb-2 uppercase tracking-wide">📍 Botão + → aba verde</p>
+                <PhoneMock highlight="add">
+                  <div className="px-3 py-2 bg-green-50">
+                    <p className="text-[9px] text-muted-foreground">Botão + →</p>
+                    <p className="text-sm font-black">💚 Entrou dinheiro</p>
+                  </div>
+                  <div className="px-3 py-2 space-y-1.5">
+                    <div className="h-8 rounded-xl bg-green-100 border-2 border-green-400 flex items-center justify-center">
+                      <span className="text-[10px] font-black text-green-700">💚 Aba VERDE — selecionada</span>
+                    </div>
+                    <div className="grid grid-cols-4 gap-1">
+                      {["💼","💻","🏘️","💰"].map(e => (
+                        <div key={e} className="h-9 rounded-xl bg-green-50 border border-green-200 flex items-center justify-center text-base">{e}</div>
+                      ))}
+                    </div>
+                    <motion.div
+                      animate={{ boxShadow: ["0 0 0 0 rgba(22,163,74,0)", "0 0 0 4px rgba(22,163,74,0.3)", "0 0 0 0 rgba(22,163,74,0)"] }}
+                      transition={{ repeat: Infinity, duration: 2 }}
+                      className="h-8 rounded-xl bg-green-500 flex items-center justify-center">
+                      <span className="text-[10px] font-black text-white">✅ Salvar renda</span>
+                    </motion.div>
+                  </div>
+                </PhoneMock>
+              </div>
+
+              <div className="p-5 space-y-4">
+                <StepTitle emoji="💚" title="De onde vem seu dinheiro?"
+                  desc="Vamos registrar sua principal entrada de renda do mês. Isso ajuda o app a calcular quanto você tem livre para gastar — a famosa &quot;grana disponível&quot;." />
+
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground mb-2">Qual é o tipo da sua renda principal?</p>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {incomeCategories.map(c => (
+                      <button key={c.id} onClick={() => setIncCat(c.id)}
+                        className={`flex items-center gap-2 p-2.5 rounded-2xl border-2 text-xs font-semibold transition-all ${incCat === c.id ? "border-green-400 bg-green-50 text-green-700" : "border-border/50 bg-muted/30 text-muted-foreground"}`}>
+                        <span className="text-xl">{c.emoji}</span>{c.id}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <RangeSelector
+                  label="Mais ou menos quanto você costuma receber por mês? (opcional)"
+                  value={incRange}
+                  onChange={setIncRange}
+                  options={[
+                    { label: "Até R$ 2.000",   value: "ate-2k" },
+                    { label: "R$ 2k – R$ 5k",  value: "2k-5k" },
+                    { label: "R$ 5k – R$ 10k", value: "5k-10k" },
+                    { label: "R$ 10k ou mais", value: "10k+" },
+                  ]}
+                />
+                <p className="text-[11px] text-muted-foreground text-center -mt-2">
+                  🔒 Só você vê isso. Uma estimativa já ajuda bastante!
+                </p>
+
+                <PrimaryBtn onClick={() => saveIncome(false)} disabled={!incRange} loading={saving}>
+                  Registrar renda 💚 <span className="text-xs opacity-70 font-normal">+20 pts</span>
+                </PrimaryBtn>
+                <SkipBtn onSkip={() => saveIncome(true)} />
+              </div>
+            </motion.div>
+          )}
+
+          {/* ── ETAPA 6: Gasto ── */}
+          {step === 6 && (
+            <motion.div key="s6" initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -40 }} className="bg-card rounded-3xl shadow-xl overflow-hidden">
+
+              <div className="bg-red-50/50 p-4">
+                <p className="text-[10px] font-bold text-red-600 text-center mb-2 uppercase tracking-wide">📍 Botão + → aba vermelha</p>
+                <PhoneMock highlight="add">
+                  <div className="px-3 py-2 bg-red-50/80">
+                    <p className="text-[9px] text-muted-foreground">Botão + →</p>
+                    <p className="text-sm font-black">🔴 Saiu dinheiro</p>
+                  </div>
+                  <div className="px-3 py-2 space-y-1.5">
+                    <div className="h-8 rounded-xl bg-red-100 border-2 border-red-400 flex items-center justify-center">
+                      <span className="text-[10px] font-black text-red-700">🔴 Aba VERMELHA — selecionada</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1">
+                      {["🍔","🛒","🚗","🏠","💊","🎮"].map(e => (
+                        <div key={e} className="h-8 rounded-xl bg-red-50 border border-red-200 flex items-center justify-center text-base">{e}</div>
+                      ))}
+                    </div>
+                    <motion.div
+                      animate={{ boxShadow: ["0 0 0 0 rgba(239,68,68,0)", "0 0 0 4px rgba(239,68,68,0.3)", "0 0 0 0 rgba(239,68,68,0)"] }}
+                      transition={{ repeat: Infinity, duration: 2 }}
+                      className="h-7 rounded-xl bg-red-500 flex items-center justify-center">
+                      <span className="text-[10px] font-black text-white">✅ Salvar gasto</span>
+                    </motion.div>
+                  </div>
+                </PhoneMock>
+              </div>
+
+              <div className="p-5 space-y-4">
+                <StepTitle emoji="🔴" title="Vamos registrar um gasto?"
+                  desc="Pensa em algo que você gastou hoje ou essa semana. Pode ser qualquer coisa — um café, gasolina, mercado. Não precisa ser exato, pode ser uma estimativa!" />
+
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground mb-2">Que tipo de gasto foi?</p>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {expenseCategories.map(c => (
+                      <button key={c.id} onClick={() => setExpCat(c.id)}
+                        className={`flex flex-col items-center gap-1 p-2 rounded-2xl border-2 text-[10px] font-semibold transition-all ${expCat === c.id ? "border-primary bg-primary/8 text-primary" : "border-border/50 bg-muted/30 text-muted-foreground"}`}>
+                        <span className="text-xl">{c.emoji}</span>{c.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <RangeSelector
+                  label="Quanto foi mais ou menos? (opcional)"
+                  value={expRange}
+                  onChange={setExpRange}
+                  options={[
+                    { label: "Menos de R$ 50",   value: "ate-50" },
+                    { label: "R$ 50 – R$ 200",   value: "50-200" },
+                    { label: "R$ 200 – R$ 500",  value: "200-500" },
+                    { label: "R$ 500 ou mais",   value: "500+" },
+                  ]}
+                />
+
+                <PrimaryBtn onClick={() => saveExpense(false)} disabled={!expRange} loading={saving}>
+                  Registrar gasto 🔴 <span className="text-xs opacity-70 font-normal">+10 pts</span>
+                </PrimaryBtn>
+                <SkipBtn onSkip={() => saveExpense(true)} />
+              </div>
+            </motion.div>
+          )}
+
+          {/* ── ETAPA 7: Limite de gastos ── */}
+          {step === 7 && (
+            <motion.div key="s7" initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -40 }} className="bg-card rounded-3xl shadow-xl overflow-hidden">
+
+              <div className="bg-primary/5 p-4">
+                <p className="text-[10px] font-bold text-primary text-center mb-2 uppercase tracking-wide">📍 Aba Planejar → Meu Limite</p>
+                <PhoneMock highlight="plan">
+                  <div className="px-3 py-2 bg-primary/5">
+                    <p className="text-[9px] text-muted-foreground">Aba Planejar →</p>
+                    <p className="text-sm font-black">🎯 Meu Limite</p>
+                  </div>
+                  <div className="px-3 py-2 space-y-1.5">
+                    {[{ emoji: "🍔", label: "Comida", pct: 70, color: "#F97316" }, { emoji: "🚗", label: "Transporte", pct: 35, color: "#3B82F6" }].map(c => (
+                      <div key={c.label} className="space-y-0.5">
+                        <div className="flex justify-between text-[9px] font-semibold">
+                          <span>{c.emoji} {c.label}</span>
+                          <span style={{ color: c.color }}>{c.pct}% usado</span>
+                        </div>
+                        <div className="h-1.5 bg-muted/50 rounded-full overflow-hidden">
+                          <div className="h-full rounded-full" style={{ width: `${c.pct}%`, background: c.color }} />
+                        </div>
+                      </div>
+                    ))}
+                    <motion.div
+                      animate={{ boxShadow: ["0 0 0 0 rgba(124,58,237,0)", "0 0 0 4px rgba(124,58,237,0.3)", "0 0 0 0 rgba(124,58,237,0)"] }}
+                      transition={{ repeat: Infinity, duration: 2 }}
+                      className="h-7 rounded-xl border-2 border-primary/40 bg-primary/8 flex items-center justify-center">
+                      <span className="text-[9px] font-black text-primary">+ Definir teto de gastos</span>
+                    </motion.div>
+                  </div>
+                </PhoneMock>
+              </div>
+
+              <div className="p-5 space-y-4">
+                <StepTitle emoji="🎯" title="Defina um teto de gastos"
+                  desc='Na aba Planejar você diz: "quero gastar no máximo R$ 500 por mês com comida". O app mostra uma barrinha e te avisa quando estiver chegando no limite — sem sustos no fim do mês!' />
+
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground mb-2">Em qual área você quer controlar primeiro?</p>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {budgetCategories.map(c => (
+                      <button key={c.id} onClick={() => setBudCat(c.id)}
+                        className={`flex flex-col items-center gap-0.5 p-2 rounded-2xl border-2 text-[9px] font-semibold transition-all ${budCat === c.id ? "border-primary bg-primary/8 text-primary" : "border-border/50 bg-muted/30 text-muted-foreground"}`}>
+                        <span className="text-lg">{c.emoji}</span>{c.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <RangeSelector
+                  label={`Quanto quer gastar por mês com ${budCatLabel}?`}
+                  value={budRange}
+                  onChange={setBudRange}
+                  options={[
+                    { label: "Até R$ 300",      value: "ate-300" },
+                    { label: "R$ 300 – R$ 800", value: "300-800" },
+                    { label: "R$ 800 – R$ 2k",  value: "800-2k" },
+                    { label: "R$ 2k ou mais",   value: "2k+" },
+                  ]}
+                />
+
+                <PrimaryBtn onClick={() => saveBudget(false)} disabled={!budRange} loading={saving}>
+                  Definir meu teto 🎯 <span className="text-xs opacity-70 font-normal">+40 pts</span>
+                </PrimaryBtn>
+                <SkipBtn onSkip={() => saveBudget(true)} />
+              </div>
+            </motion.div>
+          )}
+
+          {/* ── ETAPA 8: Meta / Sonho ── */}
+          {step === 8 && (
+            <motion.div key="s8" initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -40 }} className="bg-card rounded-3xl shadow-xl overflow-hidden">
+
+              <div className="bg-amber-50/50 p-4">
+                <p className="text-[10px] font-bold text-amber-700 text-center mb-2 uppercase tracking-wide">📍 Aba Início → Minhas Metas</p>
+                <PhoneMock highlight="home">
+                  <div className="px-3 py-2 bg-amber-50/60">
+                    <p className="text-[9px] text-muted-foreground">Aba Início →</p>
+                    <p className="text-sm font-black">✨ Minha Meta</p>
+                  </div>
+                  <div className="px-3 py-2 space-y-1.5">
+                    <motion.div
+                      animate={{ boxShadow: ["0 0 0 0 rgba(245,158,11,0)", "0 0 0 4px rgba(245,158,11,0.3)", "0 0 0 0 rgba(245,158,11,0)"] }}
+                      transition={{ repeat: Infinity, duration: 2 }}
+                      className="h-14 rounded-xl border-2 border-amber-300 bg-amber-50 p-2 flex flex-col justify-between">
+                      <div className="flex justify-between text-[9px] font-semibold text-amber-700">
+                        <span>✈️ Viagem dos sonhos</span><span>0%</span>
+                      </div>
+                      <div className="h-1.5 bg-amber-100 rounded-full">
+                        <div className="h-full w-0 rounded-full bg-amber-400" />
+                      </div>
+                      <span className="text-[8px] text-amber-600">Guarde um pouquinho por mês 🚀</span>
+                    </motion.div>
+                    <div className="h-7 rounded-xl bg-muted/30 flex items-center justify-center">
+                      <span className="text-[9px] text-muted-foreground">+ Criar nova meta</span>
+                    </div>
+                  </div>
+                </PhoneMock>
+              </div>
+
+              <div className="p-5 space-y-4">
+                <StepTitle emoji="✨" title="Qual é o seu sonho?"
+                  desc="Tem algo que você quer comprar, guardar ou realizar? O app calcula quanto você precisa guardar por mês pra chegar lá — e vai mostrando o progresso!" />
+
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground mb-2">O que você quer conquistar?</p>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {goalOptions.map(({ emoji, label }) => (
+                      <button key={label} onClick={() => setGoalName(label)}
+                        className={`flex flex-col items-center gap-0.5 p-2 rounded-2xl border-2 text-[9px] font-semibold transition-all ${goalName === label ? "border-amber-400 bg-amber-50 text-amber-700" : "border-border/50 bg-muted/30 text-muted-foreground"}`}>
+                        <span className="text-xl">{emoji}</span>{label}
+                      </button>
+                    ))}
+                  </div>
+                  <input value={goalName} onChange={e => setGoalName(e.target.value)}
+                    placeholder="ou escreva o seu sonho aqui..."
+                    className="w-full h-10 rounded-2xl border border-border/60 bg-muted/20 px-4 text-sm outline-none focus:border-primary transition-colors mt-2" />
+                </div>
+
+                <RangeSelector
+                  label="Quanto custa esse sonho? (mais ou menos está ótimo!)"
+                  value={goalRange}
+                  onChange={setGoalRange}
+                  options={[
+                    { label: "Até R$ 2.000",    value: "ate-2k" },
+                    { label: "R$ 2k – R$ 10k",  value: "2k-10k" },
+                    { label: "R$ 10k – R$ 50k", value: "10k-50k" },
+                    { label: "R$ 50k ou mais",  value: "50k+" },
+                  ]}
+                />
+
+                <PrimaryBtn onClick={() => saveGoal(false)} disabled={!goalName.trim() || !goalRange} loading={saving}>
+                  Criar minha meta ✨ <span className="text-xs opacity-70 font-normal">+50 pts</span>
+                </PrimaryBtn>
+                <SkipBtn onSkip={() => saveGoal(true)} />
+              </div>
+            </motion.div>
+          )}
+
+          {/* ── ETAPA 9: Celebração ── */}
+          {step === 9 && (
+            <motion.div key="s9" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+              className="bg-card rounded-3xl shadow-xl overflow-hidden">
+              <div className="p-5 space-y-4">
+
+                <motion.div initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                  transition={{ type: "spring", bounce: 0.5 }} className="text-center space-y-2">
+                  <div className="text-7xl">🏆</div>
+                  <h2 className="text-2xl font-black">Tudo pronto, {userName}!</h2>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    Você acabou de dar o primeiro passo para nunca mais chegar no fim do mês sem saber onde o dinheiro foi!
+                  </p>
+                </motion.div>
+
+                <div className="rounded-2xl p-4 text-center space-y-1"
+                  style={{ background: "rgba(124,58,237,0.08)", border: "1px solid rgba(124,58,237,0.2)" }}>
+                  <p className="text-4xl font-black text-primary">{earned + STEP_POINTS[9]} pts</p>
+                  <p className="text-xs text-muted-foreground">ganhos agora mesmo ⭐</p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-2">Lembrando onde fica cada coisa:</p>
+                  {[
+                    ["➕", "Botão + (centro)", "pra registrar qualquer gasto ou renda"],
+                    ["💳", "Aba Contas", "saldo das contas e fatura do cartão"],
+                    ["📋", "Aba Planejar", "seus limites por categoria"],
+                    ["🏠", "Aba Início", "score, missões semanais e metas"],
+                  ].map(([e, local, desc]) => (
+                    <div key={local} className="flex items-start gap-2.5 bg-muted/40 rounded-xl px-3 py-2.5">
+                      <span className="text-base mt-0.5">{e}</span>
+                      <div>
+                        <span className="text-xs font-black text-foreground">{local}</span>
+                        <span className="text-xs text-muted-foreground"> — {desc}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <PrimaryBtn onClick={finish}>
+                  Entrar no app agora 🚀 <span className="text-xs opacity-70 font-normal">+50 pts</span>
+                </PrimaryBtn>
+              </div>
             </motion.div>
           )}
 
